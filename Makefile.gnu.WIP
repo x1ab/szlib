@@ -1,0 +1,133 @@
+#-----------------------------------------------------------------------------
+# GNU Makefile for GCC/CLANG -- on both "native GNU" (i.e. Linux etc.) and
+# Windows (i.e. MinGW, w64devkit or compatible)
+#-----------------------------------------------------------------------------
+
+TMPDIR ?= .tmp
+ifdef TMP_DIR
+TMPDIR = $(TMP_DIR)
+endif
+
+# "Detect" default GCC/CLANG flavor ("mingw" on Windows, "linux" otherwise;
+# rather hamfisted, but OK for me now) --> `make TOOLCHAIN=` to override):
+ifeq "$(shell echo ${WINDIR})" ""
+TOOLCHAIN ?= linux
+else
+TOOLCHAIN ?= mingw
+endif
+
+# Supported build alternatives: debug/release, shared/static SFML:
+#   DEBUG must be 0 or 1
+#   SFML_LINKMODE must be shared or static
+DEBUG     ?= 0
+
+#-----------------------------------------------------------------------------
+# Project layout
+
+NAME      := sz
+LIBNAME   := $(NAME)
+
+#DEMO      := $(NAME)-demo
+TEST      := test/main
+#SMOKE_TEST:= test/smoke
+
+LIBDIR    := lib/$(TOOLCHAIN)
+SRCDIR    := src
+SRC        = $(shell cd "$(SRCDIR)"; $(FIND) . -name "*.cpp" -type f)
+OUTDIR    := $(TMPDIR)/build/$(TOOLCHAIN)
+OBJDIR    := $(OUTDIR)
+DEMO_OBJ       := examples/demo
+TEST_OBJ       := test/main
+SMOKE_TEST_OBJ := test/smoke
+          
+CC        := g++
+CFLAGS    := -I./$(SRCDIR) -std=c++20 -pedantic -Wall -Wextra -Wshadow -Wwrite-strings -O2 -flto
+LDFLAGS   := $(LDFLAGS) -L$(SFML_DIR)/lib
+#!! This may also be needed on Debian (not on Ubuntu) -- but just compiled it on my WSL Bullseye without it, so WTF?? --:
+#!! LDFLAGS   := -pthread $(LDFLAGS)
+
+# Switch various params. according to the host platform (i.e. the list
+# of "auxilary" libs for static build, terminal control etc.)
+ifeq "$(shell echo ${WINDIR})" ""
+# --- Not Windows (assuming "something Linux-like"):
+TERM_YELLOW   := \033[1;33m
+TERM_GREEN    := \033[1;32m
+TERM_NO_COLOR := \033[0m
+else
+# --- Windows:
+EXE_SUFFIX    :=.exe
+endif
+
+#-----------------------------------------------------------------------------
+# Tag the executables with "-mingw", or nothing, respectively:
+TOOLCHAIN_TAG := $(if $(findstring linux,$(TOOLCHAIN)),,-mingw)
+
+# Avoid the Windows FIND.exe:
+FIND = /usr/bin/find
+
+FILE_SUFFIX_DEBUG_1                      := -d
+DIR_SUFFIX_DEBUG_1                       := .d
+
+FILE_SUFFIX :=
+CFLAGS      := $(CFLAGS)
+LDFLAGS     := $(LDFLAGS)
+
+DEMO_EXE := $(DEMO)$(TOOLCHAIN_TAG)$(FILE_SUFFIX)$(EXE_SUFFIX)
+TEST_EXE := $(TEST)$(TOOLCHAIN_TAG)$(FILE_SUFFIX)$(EXE_SUFFIX)
+SMOKE_TEST_EXE := $(SMOKE_TEST)$(EXE_SUFFIX)
+# Under GCC the same lib (i.e. compilation mode) seems to work just fine 
+# for linking with both the static and dynamic SFML libs, so enough to just
+# dispatch for debug mode:
+OBJDIR   := $(OUTDIR)/o$(DIR_SUFFIX_DEBUG_$(DEBUG))
+OBJ      := $(SRC:%.cpp=$(OBJDIR)/%.o)
+LIBNAME  := $(LIBNAME)$(FILE_SUFFIX_DEBUG_$(DEBUG))
+LIBFILE  := $(LIBDIR)/lib$(LIBNAME).a
+
+#-----------------------------------------------------------------------------
+define link_cmd =
+	@echo "$(TERM_YELLOW)Linking $@$(TERM_NO_COLOR)"
+	@$(CC) $< $(CFLAGS) -L./$(LIBDIR) -l$(LIBNAME) $(LDFLAGS) -o $@
+	@echo "$(TERM_GREEN)Done.$(TERM_NO_COLOR)"
+endef
+
+#-----------------------------------------------------------------------------
+$(info Build option DEBUG = $(DEBUG))
+$(info Build option SFML_LINKMODE = $(SFML_LINKMODE))
+
+all: $(SMOKE_TEST_EXE) $(TEST_EXE) $(DEMO_EXE)
+
+#$(DEMO_EXE): $(OBJDIR)/$(DEMO_OBJ).o $(LIBFILE)
+#	$(link_cmd)
+
+$(TEST_EXE): $(OBJDIR)/$(TEST_OBJ).o $(LIBFILE)
+	$(link_cmd)
+
+#$(SMOKE_TEST_EXE): $(OBJDIR)/$(SMOKE_TEST_OBJ).o $(LIBFILE)
+#	$(link_cmd)
+
+$(LIBFILE): $(OBJ)
+	@mkdir -p $(LIBDIR)
+	@echo "$(TERM_YELLOW)Creating library$(TERM_NO_COLOR) $@"
+	@ar crvf $@ $(OBJ)
+
+# Obj. files for the library, test, demo, examples etc.
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@echo "$(TERM_YELLOW)Compiling$(TERM_NO_COLOR) $<"
+	@mkdir -p $(shell dirname $@)
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+test: $(TEST_EXE)
+	@echo "$(TERM_YELLOW)Running tests...$(TERM_NO_COLOR) $(TEST_EXE)"
+	@$(TEST_EXE)
+
+clean:
+	@echo "$(TERM_YELLOW)Removing$(TERM_NO_COLOR) $(OBJDIR) & $(LIBFILE)"
+	-@rm -r $(OBJDIR)
+	-@rm -r $(LIBFILE)
+#clean-all: clean
+#	@echo "$(TERM_YELLOW)Removing$(TERM_NO_COLOR) $(DEMO_EXE)"
+#	-@rm $(DEMO_EXE)
+	@echo "$(TERM_YELLOW)Removing$(TERM_NO_COLOR) $(TEST_EXE)"
+	-@rm $(TEST_EXE)
+#	@echo "$(TERM_YELLOW)Removing$(TERM_NO_COLOR) $(SMOKE_TEST_EXE)"
+#	-@rm $(SMOKE_TEST_EXE)

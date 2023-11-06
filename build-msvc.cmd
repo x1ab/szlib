@@ -14,7 +14,7 @@ SET RELEASE_DIR=release
 SET CPPFLAGS=%CPPFLAGS% /MT
 SET CPPFLAGS=%CPPFLAGS% /std:c++latest /W4
 ::set CPPFLAGS=%CPPFLAGS% -DDEBUG -O2
-SET CPPFLAGS=%CPPFLAGS% /DNDEBUG -O2
+SET CPPFLAGS=%CPPFLAGS% /DNDEBUG /O2 /GL
 SET CPPFLAGS=%CPPFLAGS% /EHsc
 :: Enable if there are C files, too:
 ::SET CPPFLAGS=%CPPFLAGS% /Tc src/*.c 
@@ -22,15 +22,20 @@ SET CPPFLAGS=%CPPFLAGS% /EHsc
 PUSHD %PRJ_DIR%
 
 SET saved_INCLUDE=%INCLUDE%
-SET INCLUDE=include;.;src;%INCLUDE%
+SET INCLUDE=src;%INCLUDE%
 
 IF EXIST %TMP_DIR% DEL /S /Q %TMP_DIR%\*
 IF NOT EXIST %TMP_DIR% MD %TMP_DIR%
 
 :: Build the lib:
 CL /nologo /DSZ_IMPLEMENTATION /c %CPPFLAGS% /Tp %SRC_DIR%/*.c* /Fo%TMP_DIR%/ /Fd%TMP_DIR%/
-LIB /NOLOGO %TMP_DIR%/*.obj /OUT:%RELEASE_DIR%/%LIB_NAME%.lib
+IF ERRORLEVEL 1 set error=1
+
+IF "%error%" == "" LIB /NOLOGO %TMP_DIR%/*.obj /OUT:%RELEASE_DIR%/%LIB_NAME%.lib
 ::	/REMOVE:main
+IF ERRORLEVEL 1 set error=1
+
+IF NOT "%error%" == "" goto :end
 
 :: Build the combined header:
 TYPE tooling\header-prefix.h > %RELEASE_DIR%/%LIB_NAME%.h--
@@ -39,9 +44,12 @@ FOR /R %SRC_DIR% %%F IN (*.c*); DO (
 )
 TYPE tooling\header-postfix.h >> %RELEASE_DIR%/%LIB_NAME%.h--
 
+IF NOT "%error%" == "" goto :end
 :: Build & run the tests:
 ::!! `test/run` would be a "fatal" pitfall on Windows: since we have test.cmd
 ::!! in the current dir, it would mean: `./test.cmd /run`! :-ooo
-IF NOT ERRORLEVEL 1 test\run
+:test
+test\run
 
+:end
 POPD

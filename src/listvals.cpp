@@ -1,16 +1,38 @@
+#define StringSequence // Kludge to replace messing with templates...
 // { INTERFACE ===============================================================
+
+/*!! Hell no!...
+#include <type_traits>
+template <class T>
+// Even this would already be cumbersome, but it doesn't even compile yet...
+concept StringSequence = std::is_same_v<T, std::vector<std::string>> ||
+                         std::is_same_v<T, std::array<std::string>>  ||
+//                       std::is_same_v<T, std::list<std::string>>   ||
+//                       std::is_same_v<T, std::deque<std::string>>  ||
+//                       ...
+                         std::is_array<T>); // plain old C array
+// And it's not just string, but string_view, and who knows what else.
+// And not to mention the compilation time cost, for just a simple little
+// function like this!...
+!!*/
+
 #include <string>
 namespace Sz {
-inline std::string listvals(auto const& container,
+inline std::string listvals(StringSequence auto const& container,
 	const char prewrap[] = "", const char postwrap[] = "",
 	const char sep[] = ", ",
 	const char* quote = "\"", // not const char[], to hint that it accepts nullptr!
 	const char* scary_chars = " \t\n");
 } // namespace Sz
+
 // } INTERFACE ===============================================================
 
 
-//#ifdef SZ_IMPLEMENTATION //======================================================
+//#ifdef SZ_IMPLEMENTATION //=================================================
+//	Cutting off the IMPL. secetion is disabled, as this is a template
+//	function, so it must be included! (And I'm not gonna bother with .inl
+//	files.)
+
 #include <string_view>
 #include <cstring>
 #include <cassert>
@@ -20,7 +42,7 @@ using namespace std;
 
 #define FOUND(expr) ((expr) != std::string::npos)
 #define CONTAINS(str, chars) FOUND((str).find_first_of(chars))
-string listvals(auto const& container, const char prewrap[], const char postwrap[], const char sep[],
+string listvals(StringSequence auto const& container, const char prewrap[], const char postwrap[], const char sep[],
 	const char* quote, const char* scary_chars)
 {
 	string result;
@@ -50,4 +72,6 @@ string listvals(auto const& container, const char prewrap[], const char postwrap
 #undef FOUND
 #undef CONTAINS
 }
+
 //#endif // SZ_IMPLEMENTATION //===================================================
+#undef StringSequence

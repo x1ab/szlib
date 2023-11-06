@@ -10,6 +10,7 @@ SET TMP_DIR=.tmp
 SET RELEASE_DIR=release
 
 
+::SET CC=clang++
 SET CC=g++
 
 ::! CL's args are case-sensitive! (LIB's aren't, and I guess LINK is the same...)
@@ -17,7 +18,7 @@ SET CPPFLAGS=%CPPFLAGS%
 :: -static
 SET CPPFLAGS=%CPPFLAGS% -std=c++20 -Wall
 ::set CPPFLAGS=%CPPFLAGS% -DDEBUG -O2
-SET CPPFLAGS=%CPPFLAGS% -DNDEBUG -O2
+SET CPPFLAGS=%CPPFLAGS% -DNDEBUG -O2 -flto
 :: Enable if there are C files, too:
 ::SET CPPFLAGS=%CPPFLAGS% /Tc src/*.c 
 
@@ -30,11 +31,17 @@ IF NOT EXIST %TMP_DIR% MD %TMP_DIR%
 
 :: Build the lib:
 PUSHD %TMP_DIR%
-%CC% -DSZ_IMPLEMENTATION -Iinclude -I. -Isrc -c %CPPFLAGS% -x c++ ../%SRC_DIR%/*.c*
-FOR %%O IN (*.o) DO (
-	ar -rvfuc ../%RELEASE_DIR%/lib%LIB_NAME%.a %%O
-)
+	%CC% -DSZ_IMPLEMENTATION -Isrc -c %CPPFLAGS% -x c++ ../%SRC_DIR%/*.c*
+	IF ERRORLEVEL 1 set error=1
+	IF "%error%" == "" FOR %%O IN (*.o) DO (
+		rem -> 
+		gcc-ar -rvfuc ../%RELEASE_DIR%/lib%LIB_NAME%.a %%O
+		IF ERRORLEVEL 1 set error=1
+	)
+:skip_to_popd
 POPD
+
+IF NOT "%error%" == "" goto :end
 
 :: Build the combined header:
 TYPE tooling\header-prefix.h > %RELEASE_DIR%/%LIB_NAME%.h--
@@ -43,9 +50,11 @@ FOR /R %SRC_DIR% %%F IN (*.c*); DO (
 )
 TYPE tooling\header-postfix.h >> %RELEASE_DIR%/%LIB_NAME%.h--
 
+IF NOT "%error%" == "" goto :end
 :: Build & run the tests:
 ::!! `test/run` would be a "fatal" pitfall on Windows: since we have test.cmd
 ::!! in the current dir, it would mean: `./test.cmd /run`! :-ooo
-IF NOT ERRORLEVEL 1 test\run
+test\run
 
+:end
 POPD
