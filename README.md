@@ -1,2 +1,3 @@
-# sz.c--
-My own personal C++ "ground-levelling" and general toolbox lib
+# My personal C++ "ground-levelling" and general toolbox lib
+
+* NO EXTERNAL DEPENDENCIES beyond std::!

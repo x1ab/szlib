@@ -1,0 +1,210 @@
+#!/bin/sh
+if [ -z "$_TEST_ENGINE_DIR" ]; then
+# Will become a problem if this gets changed to a sourced sub-script:
+#	echo "- ERROR: test env. uninitialized. (Run \"init_once.sh\" before \"$0\"!)";
+#	exit 101;
+# But now we are still a top-level command entry, so we can bootstrap alone:
+	export _TEST_ENGINE_DIR=`dirname "$0"`
+fi
+
+. "$_TEST_ENGINE_DIR/init_per_case.sh" || exit $?
+
+#!!?? How much of the stuff below should actually go to init_per_case?... ;)
+
+case_path=`get_case_path $1` || FATAL "Test case \"$1\" not found!" $_ABORT_
+
+#!----------------------------------------------------------------------------
+#! Now we have a path to the test case (or ""!).
+#! It can be either a single file or a test case dir, though!
+#! This script must handle the differences.
+#!----------------------------------------------------------------------------
+
+CASE=`get_case_name ${case_path}` || FATAL "get_case_name can't really fail, so dunno what to say..." 99
+export CASE
+	#! WOW!... Jesus FC!... :-/ Had to separate the `export` from setting it,
+	#! otherwise $? coming from the func. would be reset to 0! :-ooo
+	#! -> "SC2155" (https://github.com/koalaman/shellcheck/wiki/SC2155)
+
+echo "------------------------------------------------------------------------ $((cases_seen + 1))"
+DEBUG "Identified \"$1\" as test case [$CASE] at \"$case_path\""
+echo "CASE: $CASE"
+
+if [ ! -d  "$case_path" ]; then
+	case_script_src="$case_path"
+	TEST_CASE_DIR=`dirname "$case_path"`
+else
+	case_script_src="$case_path/$TEST_CASE_SCRIPT_NAME"
+	TEST_CASE_DIR=$case_path
+fi
+
+if [ ! -e "$case_script_src" ]; then
+	FATAL "Missing test script: \"$case_script_src\"!" $_ABORT_
+fi
+
+#-----------------------------------
+# Prep. (wrap) the test script...
+#-----------------------------------
+case_script="${TMP_DIR}/`basename \"$case_script_src\"`"
+	# Dir-local names in a flattened tree aren't unique, but no worries: they live per-case only!
+
+echo -n "" > "$case_script" # CREATE_EMPTY
+#echo -n "ABORTED=\"$_TENTATIVE_ABORT_\"; " >> "$case_script" # Doing this without \n, so line numbers in errors wouldn't be off! :-o
+echo -n "CREATE_EMPTY \"$_TC_CRASHFILE\"; " >> "$case_script" # To be deleted on exit
+cat "$case_script_src"            >> "$case_script"
+echo ""                           >> "$case_script" # Nice catch! :) Scripts don't need to end with \n!
+echo "rm \"$_TC_CRASHFILE\""      >> "$case_script"
+
+if [ ! -s "$case_script" ]; then
+	FATAL "Test script couldn't be copied to \"$case_script\" for processing!" $_ABORT_
+fi
+
+#-----------------------------------
+# Prep. the tmp work files...
+#-----------------------------------
+# Test (exec) steps...
+export cmdfile="${TMP_DIR}/${CASE}.cmd"
+export outfile="${TMP_DIR}/${CASE}.cmdout"
+export errfile="${TMP_DIR}/${CASE}.cmderr"
+#export retfile="${TMP_DIR}/${CASE}.cmdret"
+
+# Test case (script)...
+export expfile="${TMP_DIR}/${CASE}.expected"
+	#! Note: preparing the exp. results file requires running the case script
+	#!       first, for its EXPECT clauses, if it has no standalone EXPECT file!
+# !! To be accumulated and compared like EXPECT:
+#export retexpfile=${TMP_DIR}/${CASE}.retval.expected
+
+# Runner (meta) output...
+# Also using stderr, shared with the TC, so they remain in sync
+# (only the individual exed (RUN/SH) cmd's are redirected separately):
+export spacerrfile="${TMP_DIR}/${CASE}.spacerr"
+
+# Reset work files...
+# NOTE: They had only been deleted previously, but some scripts (like empty
+# ones...) won't create them, yet we'd still want to uniformly check them here.
+
+# Test (exec) steps...
+CREATE_EMPTY "${cmdfile}"
+CREATE_EMPTY "${outfile}"
+CREATE_EMPTY "${errfile}"
+#CREATE_EMPTY "${retfile}"
+# Test case (script)...
+CREATE_EMPTY "${expfile}"
+#CREATE_EMPTY "${retexpfile}"
+# Runner (meta) output...
+CREATE_EMPTY "${spacerrfile}"
+
+#-----------------------------------
+# Prepare the expected results...
+#-----------------------------------
+# Find (and copy, for some post-processing) a standalone EXPECT file.
+# NOTE: Preparing the in-script EXPCECT clauses is deferred until running
+#       the test script!
+static_expfile=
+if [ -e "$TEST_CASE_DIR/$EXPECT_FILE_NAME" ]; then
+	static_expfile="$TEST_CASE_DIR/$EXPECT_FILE_NAME"
+
+# NOTE:
+# In a mixed "GNU tools on Windows" env. (like mine) diff may not be able
+# to ignore CR/LF differences, so we need to strip those manually.
+# (-> e.g.: https://github.com/skeeto/w64devkit/issues/45)
+# One easy way is to normalize the newlines in *both* the output
+# and the user-supplied "expect" file -- which means we'd need to
+# "redirect" that too, the same way we do with an EXPECT clause.
+# (Because obviously we won't touch the opriginal file.)
+	# Better do this together with outfile, later below:
+	# tr -d '\015' < ${expfile} > "${kludge_expf}"
+	cp "$static_expfile" "$expfile"
+fi
+
+#-----------------------------------
+# Run a build for the test case if it needs one... (and $MAKE is set)
+#-----------------------------------
+build_dir "$TEST_CASE_DIR" || FATAL "Failed to build the test case!" $_ABORT_
+
+#-----------------------------------
+# Finally, run (source) the case...
+#-----------------------------------
+# These are only exports to allow some wicked recursion hacks by users:
+export EXPECT=
+export EXPECT_ERROR=ignore
+export FORCED_RESULT=
+# This comes from the top-level (script) execution context:
+#export ABORTED=
+export case_variant_counter=0
+
+# NOTE: thist script *itself* may get aborted on severe shell errors in the
+# TC, so we'd better output stderr early, while we still can!...
+savecd=`pwd`
+cd "${TEST_CASE_DIR}"
+
+	. "$case_script" 2> >(tee -a "$spacerrfile" >&2)
+	#. "$case_script" 2>> "$errfile"
+
+cd "${savecd}"
+
+
+testcase_status=0
+
+# Since there's no distinction between wrapper shell "syntax" errors
+# and the exit codes the actual commands return, this is just guesswork.
+# (In fact, the shell won't even return nonzero for some broken scripts,
+# e.g. with bad if "syntax": https://unix.stackexchange.com/a/650948/36398.)
+# But a good chunk of "meta" errors overlap with having stderr output...
+#!! Could also check a completion flag, though, like start with a "tentative"
+# ABORTED flag, which should be cleared at the end.
+retval=$?; if [ -s "$errfile" ] || [ ! -z "$ABORTED" ]; then
+	ERROR "Test script was terminated (with shell exit code $retval)!"
+	if [ ! -z "$ABORTED" ]; then DEBUG "ABORT req.: $ABORTED"; fi
+	DEBUG "accumulated cmd stderr: `cat \"$errfile\"`"
+	echo -e "  `cat \"$errfile\"`"
+	echo "  !!!!!!!!!!!!!!!!!!!!!!!!! ABORTED !!!!!!!!!!!!!!!!!!!!!!!!!"
+	exit $_ABORT_
+fi
+
+# Forced fail/pass?
+if [ ! -z "$FORCED_RESULT" ]; then testcase_status=$FORCED_RESULT; fi
+
+#-----------------------------------
+# Diff the result (if we're still in the green)
+#-----------------------------------
+if [ "$testcase_status" == "0" ]; then
+	# In-script EXPECT? (Can't decide based on $EXPECT, as it can be empty!)
+	if [ -z "$static_expfile" ]; then
+		# $EXPECT must be quoted to preserve newlines. And mind the -n, too:
+		echo -n "$EXPECT" > "$expfile"
+	fi
+
+	normalize_crlf "$expfile"
+	normalize_crlf "$outfile"
+		# These would prevent precise testing of whitespace in outputs, but CR/LF
+		# mismatches is a bigger issue than what we could handle on this level...
+
+	#echo diff -b "$outfile" "$expfile"
+	diff -b "$outfile" "$expfile"
+	diff_result=$?
+
+	if [ "$diff_result" != "0" ]; then testcase_status=15; fi
+fi
+
+if [ "$testcase_status" == "0" ]; then
+	echo "  OK."
+else
+	echo "  !!!!!!!!!!!!!!!!!!!!!!!!! FAILED !!!!!!!!!!!!!!!!!!!!!!!!! (status: $testcase_status)"
+fi
+
+exit $testcase_status
+
+
+#-----------------------------------------------------------------------------
+# LESSONS...:
+
+# NOTE: this "thoughtful precaution" actually made it impossible to ever execute it...:
+#	case_exe="\"./issue 10.exe\""
+# E.g. an earlier comment from run_cmd:
+#	$* didn't work, despite a) apparently proper-looking quoting in the echoed output,
+#	and also b) running the exact same command successfully from the sh command line...
+#	and even c) running it directly from here:
+#	"./issue 10.exe" --long
+# (Neither did any quoting, shift+quoting, backticking, $()ing, whatever... Which is now
+# understandable, in hinsight, but was a nightmare with a dual CMD / sh mindset! :) )

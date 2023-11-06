@@ -1,0 +1,28 @@
+# BEWARE: NMake fails to execute commands as ../cmd, but ..\cmd works! :-o So:
+DIR_OFFSET_BACKSLASH_FIXUP=$(DIR_OFFSET:/=\)
+TEST_DIR_BACKSLASH_FIXUP=$(TEST_DIR:/=\)
+TEST_ENGINE_DIR_BS_FIXUP=$(TEST_ENGINE_DIR:/=\)
+
+EXE=$(CASE).exe
+src=$(EXE:.exe=.cpp)
+
+# Must be quoted for any spaces in the name! (Don't ask how much time
+# I wasted on this simple rule mysteriously executing twice! :) )
+TARGET_NAME_W_SPACES_QUOTED="$(EXE)"
+
+src_quoted="$(src)"
+
+#!!If no BUILD_DEPS_COMMON then TEST_DIR/ would break, but fortunately
+#!!TEST_DIR/. won't... Ehh... But then again, the test dir would most likely
+#!!be more up-to-date than the TC target, always triggering a build...
+#!!At least that's exactly what happened with GCC -- not NMAKE though,
+#!!but the approach is still flawed (and NMAKE's doing the wrong thing).
+!if "$(BUILD_DEPS_COMMON)" != ""
+_BUILD_DEPS_COMMON=$(TEST_DIR)/$(BUILD_DEPS_COMMON)
+!endif
+deps=$(_BUILD_DEPS_COMMON) $(src_quoted)
+
+# (The "real" $(SHELL) is no good on Windows, even if set!)
+GENERIC_BUILD_CMD=$(_SH_) -c ". build.sh \"$(CASE)\""
+$(TARGET_NAME_W_SPACES_QUOTED): $(deps)
+	@$(GENERIC_BUILD_CMD)
