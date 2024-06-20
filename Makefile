@@ -1,6 +1,6 @@
 ##############################################################################
 #
-# Makefile for BusyBox's built-ing pdpmake, using extensions that are NOT
+# Makefile for BusyBox's built-in pdpmake, using extensions that are NOT
 # compatible with GNUmake!
 #
 #! NOTE: The MAKE process must be run in the project (root) dir,
@@ -20,7 +20,7 @@ SZ_OUT_SUBDIR ?= .tmp/build
 #!! Can't be empty, for error-prone $(...DIR)/... concats (yet)!
 SZ_RUN_SUBDIR ?= .
 
-exe = $(exedir)/$(SZ_APP_NAME)$(cflags_crt_linkmode_with_debug)$(buildmode_sfml_linkmode_tag).exe
+exe = $(exedir)/$(SZ_APP_NAME)$(cflags_crt_linkmode_with_debug)$(buildmode_sfml_linkmode_tag)
 
 outdir = $(SZ_OUT_SUBDIR)
 #!!objdir = $(vroot)/obj
@@ -101,8 +101,8 @@ buildmode_file_tag = $(buildmode_crtdll_tag)$(buildmode_debug_tag)
 
 #--- CUSTOMIZATIONS ----------------------------------------------------------
 CL   := cl /nologo
-CC   := $(CL) -c
-CXX  := $(CL) -c /EHsc
+CC   := $(CL) -c /TC
+CXX  := $(CL) -c /TP /EHsc
 LINK := link.exe /nologo
 SH   := busybox sh
 
@@ -110,18 +110,20 @@ SH   := busybox sh
 # The optional `...FLAGS_` macros can be passed via the cmdline for overriding!
 # Not using += because we're prepending, to support overriding (e.g. from the CMDLINE)!
 #! Kludge: avoid recursive assignment, while still allowing deferred expansion!
-CFLAGS   = $(cflags_crt_linkmode_with_debug) $(cflags_debug)
+CFLAGS   = $(cflags_debug) $(cflags_crt_linkmode_with_debug)
 #!! Incomplatible with /RTCs if DEBUG, so moved back to the debug dispatching:
 #!!CFLAGS  += /O2
 # Add a /I also for including the commit hash file:
-CFLAGS  += /I$(objdir) /I$(outdir)
+CFLAGS  += -I$(objdir) -I$(outdir)
 CFLAGS  += /W4
+CFLAGS  += /Fo$(objdir)/ 
 CFLAGS  += $(CFLAGS_)
 CPPFLAGS   = $(CFLAGS) /std:c++latest /ifcOutput $(ifcdir)/ /ifcSearchDir $(ifcdir)/
-CPPFLAGS  += /GL
+# Whole program optimization (which we don't need in a lib, I guess...), incompatible with /Zi!
+#CPPFLAGS  += /GL
 CPPFLAGS  += $(CPPFLAGS_)
 LINKFLAGS   = $(linkflags_debug)
-LINKFLAGS  += /LTCG
+#LINKFLAGS  += /LTCG
 LINKFLAGS  += $(linkflags_debug) $(LINKFLAGS_)
 
 
@@ -139,11 +141,24 @@ vroot = $(SZ_OUT_SUBDIR)/v$(buildmode_dir_tag)
 vroot_bs = $(SZ_OUT_SUBDIR)\v$(buildmode_dir_tag)
 #dump:;@echo $(vroot)
 
-src_subdir=$(SZ_SRC_SUBDIR)
-SOURCES != busybox sh -c "find $(src_subdir) -name '*.c' -o -name '*.cpp' -o -name '*.ixx'"
+src_subdir = $(SZ_SRC_SUBDIR)
+
+SOURCES__$(test) != busybox sh -c "find $(src_subdir)\
+ -name '*.hh' -o -name '*.c' -o -name '*.cpp' -o -name '*.cc'\
+ -o -name '*.ixx' -o -name '*.cxx'"
+SOURCES__$(test) := $(SOURCES__$(test):$(src_subdir)/%=%)
+#dump:; @echo "SOURCES__$(test): $(SOURCES__$(test))"
+
 #!!?? Couldn't get the BB `find` syntax right without the `sh -c` kludge! :-/
-SOURCES := $(SOURCES:$(src_subdir)/%=%)
-#test:: ; @echo SOURCES: $(SOURCES)
+SOURCES__ != busybox sh -c "find $(src_subdir)\
+ -name '*.c' -o -name '*.cpp' -o -name '*.cc'\
+ -o -name '*.ixx' -o -name '*.cxx'"
+SOURCES__ := $(SOURCES__:$(src_subdir)/%=%)
+#dump:; @echo SOURCES: $(SOURCES)
+
+SOURCES := $(SOURCES__$(test))
+#dump:; @echo "test: $(test), SOURCES: $(SOURCES)"
+
 
 # Generated per-obj header auto-dep. includes are collected here:
 hdep_makinc_file = $(vroot)/hdeps.mak
@@ -154,20 +169,38 @@ hdep_makinc_file = $(vroot)/hdeps.mak
 objs := $(SOURCES:%=$(objdir)/%)
 #dump:; @echo objs: $(objs)
 objs := $(objs:%.c=%.obj)
+objs := $(objs:%.cc=%.obj)
 objs := $(objs:%.cpp=%.obj)
+objs := $(objs:%.cxx=%.obj)
 objs := $(objs:%.ixx=%.obj)
+# Also for unittesting the header-only modules:
+objs := $(objs:%.hh=%.obj)
 #dump:; @echo objs: $(objs)
 #!! No idea how this would translate to 2-file module sources though:
 #!! CPP_MODULE_IFCS already has $(ifcdir), which is currently identical to $(objdir), so...
 objs_of_modules = $(CPP_MODULE_IFCS:%.ifc=%.obj)
 #dump:; @echo objs_of_modules: $(objs_of_modules)
 
+
 #-----------------------------------------------------------------------------
+# Main target rules...
+#-----------------------------------------------------------------------------
+
 # List the phonies so `make -t` won't create empty files for them:
 .PHONY: build info mk_outdirs collect_sources cpp_modules
 
-build: info .WAIT mk_outdirs .WAIT collect_sources .WAIT cpp_modules .WAIT $(exe);
-	@echo "Main target ready: $(exe)"
+#!!...$(lib): $(objs)
+
+#test ?= $(exe)
+#real_exe = $(test).exe
+
+_real_exe__$(test) := $(test)
+_real_exe__ := $(exe)
+real_exe := $(_real_exe__$(test)).exe
+#dump:; @echo real_exe: $(real_exe)
+
+build: info .WAIT mk_outdirs .WAIT collect_sources .WAIT cpp_modules .WAIT $(real_exe);
+	@echo "Main target ready: $(real_exe)"
 info:
 	@echo "Build mode: DEBUG=$(DEBUG), CRT=$(CRT), SFML=$(SFML)"
 
@@ -183,7 +216,7 @@ $(exedir)::; @$(_mkdir)
 collect_sources:
 	@echo Syncing the build cache...
 #	This (cp -u) only copies newer files (confirmed with -uia):
-	@cp -ufa '$(src_subdir)' '$(vroot)'
+	cp -ufa '$(src_subdir)' '$(vroot)'
 #	As cp can only add and overwrite but not delete existing files,
 #	the cached tree must be deleted from time to time to remove cruft!
 	@touch "$(vroot)/.cached_src_age"
@@ -212,21 +245,30 @@ cpp_modules:: $(CPP_MODULE_IFCS) $(objs_of_modules)
 #!!??$(objs_using_modules) $(objs_of_modules): $(CPP_MODULE_IFCS)
 $(objs_using_modules): $(CPP_MODULE_IFCS)
 
-# Include autodeps if present
--include $(hdep_makinc_file)
-
 # Strip the ugly paths from each object
 #!! Alas, can't be done without my path-inference hack to pdpmake:
 #!!$(exe): $(objs:$(objdir)/%=%)
 #!!	@echo LINK $?
 #!!	$(LINK) $(LINKFLAGS) /libpath:$(objdir) $(objs) $(EXT_LIBS) /out:$@
-$(exe): $(objs)
+#!!...$(exe): $(lib)
+$(real_exe): $(objs)
 	$(LINK) $(LINKFLAGS) $(objs) $(EXT_LIBS) /out:$@
+
+#!!...$(test).exe: $(lib)
+#$(test).exe: $(objs)
+#	echo Linking UNIT-TEST executable: $@...
+#	$(LINK) $(LINKFLAGS) $(objs) $(EXT_LIBS) /out:$@
+
+#------------------------------
+# Include autodeps if present
+-include $(hdep_makinc_file)
+
+
 
 #-----------------------------------------------------------------------------
 # Inference rules...
 #-----------------------------------------------------------------------------
-.SUFFIXES: .c .cpp .ixx
+.SUFFIXES: .c .cc .cpp .cxx .ixx .hh
 
 _cc_info = @echo Compiling $(<:$(vroot)/%=%)...
 _cc_out  = $(outdir)/.tool-output.tmp
@@ -235,13 +277,13 @@ _cc_exitcode = $(outdir)/.tool-exitcode.tmp
 # Special fucked-up hack to work around the /showIncludes output of CL
 # incorrectly being sent to stdout -- AS WELL AS ITS ERRORS!!! :-O OMFG... :-/
 # Also make sure to fail on behalf of CL if there were errors...
-_CL_dephack = /showIncludes > $(_cc_out); echo $$? > $(_cc_exitcode)
+_CL_dephack = /showIncludes > $(_cc_out); echo -n $$? > $(_cc_exitcode)
 _CL_dephack_sh = $(outdir)/.cl-stderr-fuckup.sh
 _CL_hdeps = $(outdir)/.hdeps.tmp
 _CL_dephack_errhandler =@\
 	echo "grep -v \"Note: including file:\" $(_cc_out)"                    >  $(_CL_dephack_sh) &&\
 	echo "grep -q \" error\" $(_cc_out) && exit `cat \"$(_cc_exitcode)\"`" >> $(_CL_dephack_sh) &&\
-	echo "grep    \"Note: including file:\" $(_cc_out) > $(_CL_hdeps)"     >> $(_CL_dephack_sh) &&\
+	echo "grep    \"Note: including file:\" $(_cc_out) > $(_CL_hdeps) || true" >> $(_CL_dephack_sh) &&\
 	echo "exit 0"                                                          >> $(_CL_dephack_sh) &&\
 	. $(_CL_dephack_sh)
 
@@ -256,16 +298,56 @@ _CL_dephack_procdep = @busybox awk -e 'BEGIN{print"$@:\\"}\
 #!!?? WTF: this worked directly from the cmd (FAR) commandline, but not here:
 #!!??_teehack2 = busybox grep -iF $(vroot_bs)\$(src_subdir) $@.dep.tmp
 
+# Sigh, '#' can't be used directly, as comments can't be escaped :-/
+_HASH_ != busybox printf "\x23"
+c_recipe =\
+	f="$<";\
+	if [ "$(<F)" == "$(test).$${f$(_HASH_)$(_HASH_)*.}" ]; then\
+		echo "  COMPILING WITH -DUNIT_TEST: $<...";\
+		$(CC) -DUNIT_TEST $(CFLAGS) $< $(_CL_dephack);\
+	else\
+		$(CC) $(CFLAGS) $< $(_CL_dephack);\
+	fi
+
+# No rule-specific macros either, so: duplicate...
+cpp_recipe =\
+	f="$<";\
+	if [ "$(<F)" == "$(test).$${f$(_HASH_)$(_HASH_)*.}" ]; then\
+		echo "  COMPILING WITH -DUNIT_TEST: $<...";\
+		$(CXX) -DUNIT_TEST $(CPPFLAGS) $< $(_CL_dephack);\
+	else\
+		$(CXX) $(CPPFLAGS) $< $(_CL_dephack);\
+	fi
+
+_test__$(test) := .hh
+_test__ := .ignore
+hh_too_if_unittesting := $(_test__$(test))
+#dump:; echo "test: $(test), unittestable_suffix: $(unittestable_suffix)"
+
 .c.obj:
 	$(_cc_info)
-	-$(CC) $(CFLAGS) /Fo$(objdir)/ $< $(_CL_dephack)
+	-@$(c_recipe)
 		$(_CL_dephack_errhandler)
+	$(_CL_dephack_procdep)
+	@mv $(objdir)/`basename $@` -t `dirname $@`
+
+.cc.obj:
+	$(_cc_info)
+	-$(cpp_recipe)
+		$(_CL_dephack_errhandler)	
 	$(_CL_dephack_procdep)
 	@mv $(objdir)/`basename $@` -t `dirname $@`
 
 .cpp.obj:
 	$(_cc_info)
-	-$(CXX) $(CPPFLAGS) /Fo$(objdir)/ $< $(_CL_dephack)
+	-@$(cpp_recipe)
+		$(_CL_dephack_errhandler)
+	$(_CL_dephack_procdep)
+	@mv $(objdir)/`basename $@` -t `dirname $@`
+
+$(hh_too_if_unittesting).obj:
+	$(_cc_info)
+	-$(cpp_recipe)
 		$(_CL_dephack_errhandler)
 	$(_CL_dephack_procdep)
 	@mv $(objdir)/`basename $@` -t `dirname $@`
@@ -282,7 +364,3 @@ _CL_dephack_procdep = @busybox awk -e 'BEGIN{print"$@:\\"}\
 		$(_CL_dephack_errhandler)
 	$(_CL_dephack_procdep)
 	@mv $(objdir)/`basename $@` -t `dirname $@`
-
-#-----------------------------------------------------------------------------
-# Custom rules...
-#-----------------------------------------------------------------------------

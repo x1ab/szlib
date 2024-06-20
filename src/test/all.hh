@@ -1,0 +1,17 @@
+﻿// This is supposed to be included explicitly by a full test build,
+// e.g. as bbuild-msvc "CFLAGS_=/DUNIT_TEST /FItest/all.hh"
+
+#ifdef UNIT_TEST
+#undef UNIT_TEST
+
+//!!... #include "../all.hh"
+
+//============================================================================
+#include <iostream>
+	using std::cout;
+
+int main()
+{
+	cout << "Main test... is empty for now.\n";
+}
+#endif // UNIT_TEST

@@ -17,13 +17,13 @@ concept StringSequence = std::is_same_v<T, std::vector<std::string>> ||
 !!*/
 
 #include <string>
-namespace Sz {
+namespace sz {
 inline std::string listvals(StringSequence auto const& container,
 	const char prewrap[] = "", const char postwrap[] = "",
 	const char sep[] = ", ",
 	const char* quote = "\"", // not const char[], to hint that it accepts nullptr!
 	const char* scary_chars = " \t\n");
-} // namespace Sz
+} // namespace sz
 
 // } INTERFACE ===============================================================
 
@@ -37,7 +37,7 @@ inline std::string listvals(StringSequence auto const& container,
 #include <cstring>
 #include <cassert>
 
-namespace Sz {
+namespace sz {
 using namespace std;
 
 #define FOUND(expr) ((expr) != std::string::npos)
@@ -71,7 +71,7 @@ string listvals(StringSequence auto const& container, const char prewrap[], cons
 }
 #undef FOUND
 #undef CONTAINS
-}
+} // namespace sz
 
 //#endif // SZ_IMPLEMENTATION //===================================================
 #undef StringSequence

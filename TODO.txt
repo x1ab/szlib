@@ -1,0 +1,40 @@
+﻿- Building tests is way too cumbersome, with the horrid experimental support
+  code needed for that only being present in toggle_action.hh currently...
+  Anyway, to test a particular header:
+
+	busybox make "CFLAGS_=-DUNIT_TEST -include toggle_action.hh"
+
+  or, for MSVC:
+	
+	bbuild-msvc "CFLAGS_=/DUNIT_TEST /FItoggle_action.hh"
+
+  Then just run `test.cmd` in the repo root -- it should execute the
+  latest file named `*test*.exe` (or nothing if missing).
+
+- Building a unit test should clean the prev. build results first!
+
+------------------------------------------------------------------------------
+  OLD STUFF, NOT SURE HOW MUCH OF THIS IS STILL RELEVANT:
+------------------------------------------------------------------------------
+
+- `build test=module` doesn't clean & recompile first! It just relinks
+  modul.exe with all the existing objects! :)
+
+  There should be a `test` target, which would link all objs to separate
+  executables by default, or `make test=some-module` could also just
+  build that one exe (so no multiple mains...), or even inferecen rules
+  could check for that name (in the command block/recipe) and only define
+  UNIT_TEST for a matching name.
+  Same names in multiple dirs would still fail with these approaches tho.
+
+  - If the test sources are kept in separete files, then those should be
+    collected separately (not with the current catch-all SOURCES != ...),
+    via distinct dir and/or name patterns.
+
+  - Embedding the tests into the sources of header-only (i.e. most) modules
+    would mean LOTS of "garbage" in the released material, unless an extra
+    build step could remove them. (OTOH, I'm trying to blur away "header-
+    only-ness" anyway, and then that distinction won't matter much.)
+
+- The exp. release dir is already outdated (since I dropped my funny
+  filename extensions, for the shortness of life & dumbness of tools)!
