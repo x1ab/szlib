@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 // My old, "meh, good enough" C++ debug helper macros
-// 2.3.4 (Public Domain; github.com/xparq/DBG.hh)
+// 2.3.5 (Public Domain; github.com/xparq/DBG.hh)
 //----------------------------------------------------------------------------
 //
 // CONTROL SYMBOLS:
@@ -1206,14 +1206,14 @@ inline Out::Out(DeviceType datadevice, DeviceType tracedevice, DBG_OSTREAM_TYPE&
 //                                 * END *
 //
 // ==========================================================================
+} // namespace Dbg
+
+using Dbg::operator<<, Dbg::operator,;
+
 #endif // DBG_OFF
 
 // Need to define it here, after DBG has been defined...
 //inline X_Invariant_Violation::X_Invariant_Violation(const char* expr)
 //	{ DBG "*** Invariant violation (Internal Error: ", (expr ? expr : "UNKNOWN"), ")! ***"; }
-
-} // namespace Dbg
-
-using Dbg::operator<<, Dbg::operator,;
 
 #endif // _DBG_HH_NC249T87DN2376T27E64N5978Y35987_
