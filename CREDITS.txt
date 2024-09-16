@@ -1,0 +1,7 @@
+﻿Public-domain* resources included:
+
+
+
+--------
+* No components with more restrictive licensing are used.
+  The copyrights of the respective authors are acknowledged.
