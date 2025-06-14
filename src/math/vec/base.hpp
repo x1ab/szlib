@@ -1,0 +1,225 @@
+#ifndef _SDF98R5YHG39P58EHUIC3J45WP09R68MYJ98TFMYJBUIO6T4J_
+#define _SDF98R5YHG39P58EHUIC3J45WP09R68MYJ98TFMYJBUIO6T4J_
+
+
+#include "_cfg.hpp"
+
+
+//============================================================================
+// Limited MSVC `import std` support
+//============================================================================
+#ifdef VEC_CPP_IMPORT_STD
+  import std;
+# include <assert.h> //! No <cassert> with import std! :-/
+#else
+# include <utility> // declval
+# include <type_traits>
+# include <concepts> //!!?? Use is_same_v instead (if possible), if <concepts> is heavier; <type_traits> would be needed later anyway!
+# include <cassert>
+#endif
+
+
+namespace VEC_NAMESPACE {
+
+
+//============================================================================
+// Generic helpers...
+//============================================================================
+
+// Utility concept to check if T is constructible with N # of ArgT params.:
+//!! -> #23, #34, https://github.com/x1ab/flexivec/issues/34#issuecomment-2278866381
+template<class T, typename ArgT, unsigned... Is>
+constexpr bool is_constructible_helper(std::integer_sequence<unsigned, Is...>) {
+	return std::is_constructible_v<T, decltype((void(Is), std::declval<ArgT>()))...>;
+}
+
+template<class T, unsigned N, typename ArgT>
+concept HasNArgCtor = is_constructible_helper<T, ArgT>(std::make_integer_sequence<unsigned, N>{});
+
+template <class V>
+concept copyable_WORKAROUND_ = std::is_copy_constructible_v<V> && std::is_copy_assignable_v<V>;
+//!! Because std::copyable didn't fit, failing for different obscure reasons across compilers... :-/
+//!! (MSVC: expression not const, GCC: is_constructible/is_convertible depends on itself... Fun.)
+//!!	std::copyable<V> // Includes copy_constructible, and movable etc.
+
+
+//============================================================================
+// VECTOR-RELATED CONCEPTS, helpers etc...
+//============================================================================
+
+//!! C++ helper traits (split out of the vector class hierarchy only to avoid
+//!! a circular dependency problem when instantiating the CRTP base!)
+//!! BUT: STILL CAN'T BE USED for the adapters themselves (instantiated WHILE
+//!! DEFINING Vector...), due to another "incomplete type" (circ. ref.) error!
+template <class V> struct Vector_traits; // Will contain specialized traits for every vector/backendv. type
+
+
+template <typename N>
+concept Scalar = !std::same_as<N, bool>
+	&& requires(N n, N m) {
+		// Exclude something that only the vec:: vectors have:
+		//! Congrats for the amazingly fucked-up `requires { requires !requires{} }` syntax, BTW!... ;-p
+		requires !requires { N::dim; }; //!! and/or: n.template get<1>();
+	}; // See #12 for details (incl. why not using std-based rules)!
+
+
+template <class V>
+concept HasDirectCoords = // Implying dim >= 2 (as usual):
+	   requires(V t) { ++t.x; }
+	&& requires(V t) { t.y; };
+
+template <class V>
+concept HasCoordFuncs = // Implying dim >= 2 (as usual):
+	   requires(V t) { { t.x() }; }
+	&& requires(V t) { { t.y() }; };
+
+// Covers both .x and .x():
+template <class V>
+concept HasCoordAccess = // Implying dim >= 2 (as usual):
+	   requires(V t) { { t.x } -> std::same_as<void>; }
+	&& requires(V t) { { t.y } -> std::same_as<void>; };
+
+// Classes (structs) with direct/named coord. access (.x, .y, ...),
+// *BUT* not being any of the n-dim. types already handled by ctors...
+// (otherwise it would be an ambiguous soup).
+//
+//!! Also: Checking for construction in a derived concept with {x, y, ...} or
+//!! (x, y, ...) would be pointless:
+//!! a) {...} is there for aggregates already (albeit the stupid C++ rule of
+//!!    mandating an extra empty {} if there's a(n empty) base would make it
+//!!    useless for anything non-trivial...), and
+//!! b) the point is unification anyway...
+//
+// -> x1ab/flexivec#47, x1ab/flexivec#39 etc.
+//
+template <class V, unsigned Dim, typename NumT>
+concept VectorDirectCoords = true
+&& (Dim >= 2 && Dim <= 4 ? requires(V v) {
+		{ v.x } -> std::convertible_to<NumT>;
+		{ v.y } -> std::convertible_to<NumT>;
+	} : true)
+&& (Dim >= 3 && Dim <= 4 ? requires(V v) {
+		{ v.z } -> std::convertible_to<NumT>;
+	} : true)
+&& (Dim == 4 ? requires(V v) {
+		{ v.w } -> std::convertible_to<NumT>;
+	} : true)
+&& requires {
+		// Exclude something that only the vec::Vector has:
+		//! Congrats, C++, for the terminally fucked-up `requires { requires !requires{} }` syntax! :-o
+		requires !requires { V::dim; }; //!! and/or: n.template get<1>();
+		requires !requires { V::adapter_type; };
+	};
+
+
+template <class V1, class V2> //!! "Concepts can't be constrained", so NOT: template <UniformVectorData V1, UniformVectorData V2>
+concept VectorData_SameDim = (V1::dim == V2::dim);
+
+
+
+// Generic ("trivial") vector data (struct)
+//----------------------------------------------------------------------------
+template <class V>
+concept UniformVectorData =
+//	copyable_WORKAROUND_<V> && // #52: Disabled for being arbitrarily restrictive.
+	requires {
+		typename V::number_type;
+//!!NOPE:	{ V::dim } -> std::same_as<unsigned>;
+//!!NOPE:	{ V::dim } -> std::same_as<const unsigned>;
+//!!NOPE:	{ std::decay_t<decltype(V::dim)> } -> std::same_as<unsigned>;
+//!!NOPE:	{ std::decay_t<decltype((V::dim))> } -> std::same_as<unsigned>;
+		{ V::dim } -> std::same_as<const unsigned&>; //!! I don't want to talk about it... :-o
+	}
+	//!! Can't put this here, as this would break "atomic constraint must be constant expr" in adapter.hpp...:
+	//!!&& std::copyable<V> // Includes copy_constructible!
+	&& (V::dim >= 2)
+	&& requires(typename V::number_type n, V v, const V cv) {
+
+		// Accessors
+		// - Templated:
+		requires requires(V v, unsigned i, V::number_type val) {
+			//!! Well, yep... Sorry to say, but C++ has cancer:
+			{ []<unsigned I>(      V&  v) -> decltype( v.template ref<I>()) {} };
+			{ []<unsigned I>(const V& cv) -> decltype(cv.template ref<I>()) {} };
+			{ []<unsigned I>(      V&  v) -> decltype( v.template get<I>()) {} };
+			{ []<unsigned I>(V& v, V::number_type val) -> decltype(v.template set<I>(val)) {} };
+		};
+		// - Runtime:
+		requires requires(V v, const V cv, unsigned i, V::number_type val) {
+			{  v.ref(i) } -> std::same_as<      typename V::number_type&>;
+			{ cv.ref(i) } -> std::same_as<const typename V::number_type&>;
+			{  v.get(i) } -> std::same_as<      typename V::number_type>;
+			{  v.set(i, val) };//!! -> std::same_as<...Not quite: V&>;
+	//!!??		{ v[i] } -> std::same_as<typename V::number_type&>; //!! Would need to be spec'd for direct named-coords.!
+		};
+	};
+
+
+// Data "plugin" for our own vector class (not adapters)
+//----------------------------------------------------------------------------
+template <class V>
+concept InternalVectorData = UniformVectorData<V>
+	&& std::is_trivially_default_constructible_v<V>
+	&& std::is_trivially_copyable_v<V>
+	//!!?? && std::is_standard_layout_v<V>
+;
+
+
+// VectorData adapter
+//
+// Note: must also have proper vector ctor(s), not just accessors etc.!
+//----------------------------------------------------------------------------
+template <class A>
+concept VectorDataAdapter = UniformVectorData<A>
+	//!! With C++20 I still couldn't do this (due to interfering e.g. with a
+	//!! supposedly unrelated issue of ctor inheritance in templated adapters):
+	//!!&& HasNArgCtor<A, A::dim, typename A::number_type>
+	&& requires(A a, const A ca) {
+		typename A::foreign_type;
+		{  a.foreign() } -> std::same_as<      typename A::foreign_type&>;
+		{ ca.foreign() } -> std::same_as<const typename A::foreign_type&>;
+		// Vector-specifics:
+		typename A::number_type;
+		{ A::dim };
+	};
+
+
+// "Live" vector (class)
+//----------------------------------------------------------------------------
+//!!
+//!! Split this into a generic part shared by both the "app vector" and the "vector adapter",
+//!! and a specific part for app-vectors only!
+//!!
+template <class V>
+concept VectorClass =
+	UniformVectorData<V> //!! NOT anything stricter here though, like InternalVectorData<V>!
+	&& std::copyable<V> // Includes copy_constructible!
+	&& requires {
+		typename V::number_type;
+		{ Vector_traits<V>::dim };// -> std::convertible_to<unsigned>;
+	}
+	&& HasNArgCtor<V, V::dim, typename V::number_type>
+	&& requires(typename V::number_type n) {
+		requires Vector_traits<V>::dim >= 2;
+	};
+
+
+// Adapter-vector
+//----------------------------------------------------------------------------
+template <class V>
+concept AdapterVector = UniformVectorData<V>
+	&& requires {
+		typename V::foreign_type; // Normally impl. as something like `using Adapter::foreign_type`.
+		typename V::number_type;
+		{ Vector_traits<V>::dim };
+		requires Vector_traits<V>::dim >= 2;
+	} && requires (V v, const V cv) {
+		{  v.operator       typename V::foreign_type&() };
+		{ cv.operator const typename V::foreign_type&() };
+	};
+
+
+} // namespace VEC_NAMESPACE
+
+
+#endif // _SDF98R5YHG39P58EHUIC3J45WP09R68MYJ98TFMYJBUIO6T4J_

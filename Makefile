@@ -216,6 +216,7 @@ $(exedir)::; @$(_mkdir)
 collect_sources:
 	@echo Syncing the build cache...
 #	This (cp -u) only copies newer files (confirmed with -uia):
+#!!	Replace with `find` or sg. that can exclude, too!...
 	cp -ufa '$(src_subdir)' '$(vroot)'
 #	As cp can only add and overwrite but not delete existing files,
 #	the cached tree must be deleted from time to time to remove cruft!

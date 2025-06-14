@@ -225,4 +225,4 @@ template <class StreamT, typename T = void*> auto  operator << (StreamT& s, sz::
 } // namespace sz
 
 
-#endif _SARTITABTFUYTFVYIDTSUYATSUIYASTD7Q8E7T8SDT7_
+#endif // _SARTITABTFUYTFVYIDTSUYATSUIYASTD7Q8E7T8SDT7_
