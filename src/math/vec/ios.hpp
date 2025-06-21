@@ -73,7 +73,7 @@
   } // namespace VEC_NAMESPACE
 
 // - - - - - - - - - - - - - - - - - - - - - -
-#else // VEC_NO_IOS
+#else // !VEC_NO_IOS
 // - - - - - - - - - - - - - - - - - - - - - -
 
 #	ifdef VEC_CPP_IMPORT_STD
@@ -156,8 +156,15 @@
 
   } // namespace VEC_NAMESPACE
 
+
+  // These are just a punch in the gut of C++ ADL to avoid arcane,
+  // counter-intuitive errors due to preferring other candidates otherwise:
+  using VEC_NAMESPACE::operator<<;
+  using VEC_NAMESPACE::operator>>;
+
+
 // - - - - - - - - - - - - - - - - - - - - - -
-#endif // VEC_NO_IOS
+#endif // !VEC_NO_IOS
 // - - - - - - - - - - - - - - - - - - - - - -
 
 

@@ -239,7 +239,7 @@ std::cerr << "[Vector: op= with opaque foreign data (which we can't print...)]\n
 	// Vector Operations...
 	//--------------------------------------------------------------------
 
-	constexpr operator bool () const;
+	constexpr explicit operator bool () const;
 
 	constexpr Vector& operator += (const Vector& other_v);
 	constexpr Vector& operator -= (const Vector& other_v);

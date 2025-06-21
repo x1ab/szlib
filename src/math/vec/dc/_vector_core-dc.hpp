@@ -239,7 +239,7 @@ std::cerr << "[Vector: op= with opaque foreign data (which we can't print...)]\n
 	// Vector Operations...
 	//--------------------------------------------------------------------
 
-	constexpr operator bool () const;
+	constexpr explicit operator bool () const;
 
 	constexpr Vector& operator += (const Vector& other_v);
 	constexpr Vector& operator -= (const Vector& other_v);
@@ -315,7 +315,8 @@ struct Vector_traits< VEC_DIRECT_COORD_SUBNAMESPACE::Vector<Dim, NumT, Adapter> 
 #undef Self
 
 // Also import the standalone vec::ops just defined (in ops.hpp) into dc::
-// for ADL to work!...
+// for ADL to prefer these to possible other candidates (e.g. those of an
+// adapted vector)...
 namespace VEC_NAMESPACE::VEC_DIRECT_COORD_SUBNAMESPACE {
 
 	using VEC_NAMESPACE::operator==;
