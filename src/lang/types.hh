@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-namespace sz {
+namespace sz::types {
 
 using u8   = std::uint8_t;
 using u16  = std::uint16_t;
@@ -21,6 +21,6 @@ using f64  = double;
 using uint  = unsigned;
 using ulong = unsigned long;
 
-}
+} // namespace sz::types
 
 #endif // _FRGHMX3O8C4TBGO8Y7ETGNMC80457GR987V56_
