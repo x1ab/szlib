@@ -27,13 +27,9 @@
 //
 
 
-// The "perfect unused-ignorer" hack:
-// f(unused1, unused2) { IGNORE unused1, unused2; }
-#ifdef IGNORE
-# error Oh no, someone beat us to it: IGNORE is already taken! ;)
-#endif
-#define IGNORE _sz_grumpy_ignorer_{},
-        struct _sz_grumpy_ignorer_{ template<typename T> _sz_grumpy_ignorer_& operator,(const T&) { return *this; } };
+// The definition of `IGNORE`... (Had to make it separately reincludable
+// for our trench warfare for it against winbase.h!... :-o :)
+#include "IGNORE.hh"
 
 
 #define AUTO_CONST constexpr static auto
