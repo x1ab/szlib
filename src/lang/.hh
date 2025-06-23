@@ -1,7 +1,7 @@
 #ifndef _90RKLJHGT45M764V6B5NC2GHDNXK86Y35J_
 #define _90RKLJHGT45M764V6B5NC2GHDNXK86Y35J_
 
-// 0.0.3
+// 0.0.4
 /*****************************************************************************
   My personal C++ "dialect add-on" and simple extensions
 
@@ -18,12 +18,31 @@
 //!! Shim for missing #warning...
 //!! ...
 
+
+//
+// I was sooooo hesitating to define these macros with lower-case names,
+// and then just let the world burn... :) But..., well, I'm still kinda
+// a human being (unfortunately); too much existing code probably uses
+// variables etc. with these names. I'd torture the wrong people.
+//
+
+
+// The "perfect unused-ignorer" hack:
+// f(unused1, unused2) { IGNORE unused1, unused2; }
+#ifdef IGNORE
+# error Oh no, someone beat us to it: IGNORE is already taken! ;)
+#endif
+#define IGNORE _sz_grumpy_ignorer_{},
+        struct _sz_grumpy_ignorer_{ template<typename T> _sz_grumpy_ignorer_& operator,(const T&) { return *this; } };
+
+
 #define AUTO_CONST constexpr static auto
 //#define auto_const AUTO_CONST // #daredef
 
-#define OUT   // ⍄ // Can't do lower-case, for collisions without context-aware parsing! :-/
+
+#define OUT   // ⍄
 #define INOUT // ⍃⍄
-//#define IN    // ⍃ <-- Whoever itches to mark an arg. "in" should seek medical help.
+//#define IN  // ⍃ <-- Whoever itches to explicitly mark an arg. as `in` should seek medical help.
 
 //
 // `fallthrough` (macroless version of the non-existant control-flow statement):
