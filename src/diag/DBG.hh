@@ -1134,7 +1134,7 @@ struct Asserter
 
 struct DbgLog
 // Simple, "stateless", low-volume debug logger
-// NOTE: Despite explicit DBGLOG_OPEN / DBGLOG_CLOSE pair of macros,
+// NOTE: Despite the explicit DBGLOG_OPEN / DBGLOG_CLOSE pair of macros,
 //       each `DBGLOG a, b...` statement will also do an open/close!
 //       (A trade-off for simplicity and robustness, at the cost of efficiency.)
 {

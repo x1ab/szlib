@@ -1,0 +1,6 @@
+﻿Replaced the local #include <plog/...> paths with "..." and with "../..."
+for the ones in subdirs, so that my prefix/proxy header can simply #include
+"plog/Log.h", and everything just works, without any build config gymnastics.
+
+(Alas, that could trigger "woah, ".." in include path!" warnings in some
+anal mode of certain compilers.)
