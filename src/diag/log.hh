@@ -6,18 +6,21 @@
 // MACRO API
 //----------------------------------------------------------------------------
 
+// SZ_LOG_DISABLE:               Redirect the logging macros to a null sink stream
 // SZ_NO_LOG_MACROS:             Only keep the SZ_LOG... macros.
 // SZ_LOG_KEEP_THE_DEBUG_MACROS_DESPITE_NDEBUG
+// SZ_LOG_USE_DEFAULT_LEVEL:     Change the default filtering level (from `info`)
+// SZ_LOG_REPLACE_IOSTREAM:      Use a crude, lightweight iostream replacement
 
-#define SZ_LOGF PLOGF
-#define SZ_LOGE PLOGE
-#define SZ_LOGW PLOGW
-#define SZ_LOGN PLOGI
-#define SZ_LOGI PLOGD
-#define SZ_LOGD PLOGV
+#define SZ_LOGF SZ_LOG_INIT_AND_EXEC(PLOGF)
+#define SZ_LOGE SZ_LOG_INIT_AND_EXEC(PLOGE)
+#define SZ_LOGW SZ_LOG_INIT_AND_EXEC(PLOGW)
+#define SZ_LOGN SZ_LOG_INIT_AND_EXEC(PLOGI)
+#define SZ_LOGI SZ_LOG_INIT_AND_EXEC(PLOGD)
+#define SZ_LOGD SZ_LOG_INIT_AND_EXEC(PLOGV)
 #define SZ_LOG  SZ_LOGN
 
-#ifndef SZ_NO_LOG_MACROS // Defining these (or not) is an app responsibility, but... a courtesy...:
+#ifndef SZ_NO_LOG_MACROS
 # ifndef SZ_LOG_DISABLE
 #  define LOGF SZ_LOGF
 #  define LOGE SZ_LOGE
@@ -47,29 +50,50 @@
 # endif // !SZ_LOG_DISABLE 
 #endif // SZ_NO_LOG_MACROS
 
+// This convoluted hack is needed because the PLOG... macros are an open if()...else!
+#define SZ_LOG_INIT_AND_EXEC(PlogMacro) \
+    if (((void)sz::log::LogMan::instance(), false)) {;} \
+    else PlogMacro
+
 
 //----------------------------------------------------------------------------
-// PLOG ADAPTER
-//----------------------------------------------------------------------------
-
+// Prep. & get the embedded PLOG sources:
 #define PLOG_CHAR_AS_NARROW
 #define PLOG_CHAR_IS_UTF8 1
 #define PLOG_OMIT_LOG_DEFINES
-
 #include "plog/Log.h"
-
-//!!?? Why does it work just fine with the wrong init header?! :-o
-//!!?? The file version of plog::init() even expects a filename (with no default)! :-o
-//!!??#include "extern/plog/Initializers/RollingFileInitializer.h"
-#include "plog/Initializers/ConsoleInitializer.h"
-
-//#include "plog/Appenders/RollingFileAppender.h"
-//#include "plog/Appenders/ColorConsoleAppender.h"
+#include "plog/Init.h"
+//#include "plog/Appenders/RollingFileAppender.h"  //!! Pulls in <iostream> (via the console appender), unfortunately!
+//#include "plog/Appenders/ColorConsoleAppender.h" //!! Pulls in <iostream>, unfortunately!
 // For custom writers/formatters:
 #include "plog/Appenders/IAppender.h"
-#include <cstdio> // snprintf
-#include <ctime> // tm, strftime
 
+//----------------------------------------------------------------------------
+// Prep. our side of the sources...
+#ifndef  SZ_LOG_REPLACE_IOSTREAM
+#  include <iostream> // *Sigh...*
+#  define SZ_LOG_IOS_NS std
+#else
+#  include "../streams.hh"
+#  define SZ_LOG_IOS_NS sz
+   namespace sz {
+	constexpr const char* endl = "\n"; // No flush() feature in sz/streams yet! :-/
+	inline OStream cout{stdout}, cerr{stderr}; // Init must happen before the first stream op.!
+   }
+#endif // SZ_LOG_REPLACE_IOSTREAM
+
+#include <string> // snprintf
+
+
+//----------------------------------------------------------------------------
+// SZ_LOG DEFINITIONS & IMPL.
+//----------------------------------------------------------------------------
+
+#ifndef SZ_LOG_BUILD
+# define SZ_LOG_INLINE inline
+#else
+# define SZ_LOG_INLINE
+#endif
 
 namespace sz {
 namespace log {
@@ -78,12 +102,12 @@ enum Level : int
 {
 	_invalid_ = 0, // E.g. for checking with `if (!level) ...` after conversions
 
-	fatal   = 1,
-	error   = 2,
-	warning = 3,
-	notice  = 4,   // "neutral" or "normal" (the default — see init()!)
-	info    = 5,   // debug info
-	detail  = 6,   // debug detail
+	fatal   = 1,   // 'F'
+	error   = 2,   // 'E'
+	warning = 3,   // 'W'
+	notice  = 4,   // 'N' - "normal", "neutral" (the default — see init()!)
+	info    = 5,   // 'I' - debug info
+	detail  = 6,   // 'D' - debug detail
 
 	max = detail,
 
@@ -97,45 +121,15 @@ enum Level : int
 	debug   = info,   // Levels above this are intended for debugging only.
 };
 
-inline Level letter_to_level(char code)
-{
-	switch (code) {
-	case 'F':   return fatal;   // F
-	case 'E':   return error;   // E
-	case 'W':   return warning; // W
-	case 'N':   return notice;  // N - "NOTICE": Default ("neutral") level, avoid the clutter! (Lower (debug) levels are disabled for NDEBUG!)
-	case 'I':   return info;    // I - "DEBUG INFO", or just "INFO"
-	case 'D':   return detail;  // D - "DEBUG DETAIL", or just "DETAIL" or "DEBUG"
-	default:      return _invalid_; //!! Make it "" if it's not actually a bug! (Dunno plog enough to decide.)
-	}
-}
 
-inline char level_to_letter(Level level)
-{
-	switch (level) {
-	case fatal:   return 'F';
-	case error:   return 'E';
-	case warning: return 'W';
-	case notice:  return 'N';
-	case info:    return 'I';
-	case detail:  return 'D';
-	default:      return '?';
-	}
-}
+SZ_LOG_INLINE Level letter_to_level(char code);
+SZ_LOG_INLINE char level_to_letter(Level level);
+SZ_LOG_INLINE const char* level_to_str(Level level, bool full_form = false);
 
-inline const char* level_to_str(Level level, bool verbose = false)
-{
-	switch (level) {
-	case fatal:   return "FATAL";
-	case error:   return "ERROR";
-	case warning: return "WARNING";
-	case notice:  return verbose ? "NOTICE"       : ""; // Default level — declutter the most common case!
-	case info:    return verbose ? "DEBUG INFO"   : "DEBUG";
-	case detail:  return verbose ? "DEBUG DETAIL" : "DETAIL";
-	default:      return "?";
-	}
-}
 
+//----------------------------------------------------------------------------
+// BACKEND ADAPTER & UTILITY CODE
+//----------------------------------------------------------------------------
 
 namespace internal {
 
@@ -143,117 +137,15 @@ namespace internal {
 #ifdef _MSC_VER
 #   pragma warning(suppress: 26812) //  Prefer 'enum class' over 'enum'
 #endif
-	static Level level(const plog::Record& record)
-	{
-		return static_cast<Level>( record.getSeverity() );
-	}
+	SZ_LOG_INLINE Level level(const plog::Record& record);
+	SZ_LOG_INLINE plog::Severity level_to_severity(Level l);
 
-	static plog::Severity level_to_severity(Level l)
-	{
-		return static_cast<plog::Severity>(l);
-	}
-
+	//--------------------------------------------------------------------
 	class plog_Szim_ConsoleAppender : public plog::IAppender
 	{
 	public:
-		void write(const plog::Record& record) override {
-
-			// [timestamp]
-			char time_buf[40]; // = ""; not needed, as long as it's always populated!
-			std::tm t;
-			plog::util::localtime_s(&t, &record.getTime().time);
-			// Writing the full date to the console would be pretty stupid:
-			//std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &t);
-			std::strftime(time_buf, sizeof(time_buf), "%H:%M:%S", &t);
-
-			// [thread ID]
-			char tid_buf[20] = "";
-			if (level(record) >= debug) { // Would be too much screen clutter for "normal"!
-				snprintf(tid_buf, sizeof(tid_buf), " [%u]",
-					(unsigned)(record.getTid()));
-			}
-
-			// [SEVERITY] — only below 'warning': warnings/errors get formatted to say so themselves!...
-			char level_buf[15] = "";
-			const char* severity_str = level_to_str(level(record));
-			if (level(record) <= warning) {
-				snprintf(level_buf, sizeof(level_buf), " [%s]",
-					severity_str);
-			}
-
-			// Origin (location): [func@line] — only for debug levels!
-			char loc_buf[40] = ""; // Long fn. names will be truncated!
-			const char* func_ptr = record.getFunc();
-			std::string func_str = func_ptr ? func_ptr : ""; // Just being null-safe...
-			if (level(record) >= info) {
-				snprintf(loc_buf, sizeof(loc_buf), " [%.32s@%zu]", //! Note the .32 str length limit!
-					func_str.c_str(), record.getLine());
-			}
-		
-			// Message (possibly prefixed/postfixed)
-			const char* msg_ptr  = record.getMessage();
-			std::string msg_str  = msg_ptr ? msg_ptr : "";   // Just being null-safe...
-			const char* msg_prefix = "";
-			const char* msg_suffix = "";
-			switch (level(record)) {
-			case warning: msg_prefix = "WARNING: "; break;
-			case error:   msg_prefix = "- ERROR: "; break;
-			case fatal:   msg_prefix = "--==<< FATAL ERROR: "; msg_suffix = " >>==--"; break;
-			default:;
-			}
-
-			// Colors...
-			const char* color_start = "";
-			const char* color_end = "\x1B[0m";
-
-//!!		if (the output is redirected to a file...) { //!! Pro'ly can't detect that here, but an entirely
-							//!! different Appender should be picked at init?
-			// Disable colors
-			//color_end = "";
-//!!		} else {
-// Black: 30, Red: 31, Green: 32, Yellow: 33, Blue: 34, Magenta: 35, Cyan: 36, White: 37
-#if defined(_WIN32)
-			switch (level(record)) {
-			case fatal:   color_start = "\x1B[96m"; break;
-			case error:   color_start = "\x1B[91m"; break; //! 31 is too dark in my Win10 Terminal. :-/
-			case warning: color_start = "\x1B[93m"; break; //! 33 literally looks like crap in my Win10 Terminal. :-/
-			case notice:  color_start = "\x1B[97m"; break; // Default level!
-			case info:    color_start = "\x1B[92m"; break; // "debug info"
-			case detail:  color_start = "\x1B[32m"; break; // "debug detail"
-			default: color_end = ""; break;
-			}
-#else // Linux term. colors might be be better balanced in gerneral, so let them differ:
-			switch (level(record)) {
-			case fatal:   color_start = "\x1B[91m"; break;
-			case error:   color_start = "\x1B[31m"; break;
-			case warning: color_start = "\x1B[33m"; break;
-			case notice:  color_start = "\x1B[97m"; break; // Default level!
-			case info:    color_start = "\x1B[92m"; break; // "debug info"
-			case detail:  color_start = "\x1B[32m"; break; // "debug detail"
-			default: color_end = ""; break;
-			}
-#endif
-//!!		} // colors enabled?
-
-			fprintf(stderr,
-				"%s"
-					"[%s.%03d] %s%s%s%s%s%s"
-				"%s\n",
-				color_start,
-					time_buf, record.getTime().millitm,
-					"", //level_buf, // Severity tags clutter the screen; look better in files!
-					msg_prefix,
-					msg_str.c_str(),
-					msg_suffix,
-					tid_buf,
-					loc_buf,
-				color_end
-			);
-			fflush(stderr); //!!?? Should be optional (configurable)?
-		} // write()
-
+		void write(const plog::Record& record) override;
 	}; // class plog_Szim_ConsoleAppender
-
 
 /*!!?? Not needed on modern Windows configs any more?
 	// Helper to enable ANSI escape codes on Windows 10+ consoles
@@ -275,103 +167,186 @@ namespace internal {
 	}
 ??!!*/
 
-	//----------------------------------------------------------------------------
-	inline auto plog_instance(/*!! instance_ID = ...!!*/)
-		{ return plog::get(/*!! instance_ID !!*/); }
+	//--------------------------------------------------------------------
+	class plog_Szim_FileAppender : public plog::IAppender
+	{
+		FILE* f = nullptr;
+	public:
+		explicit plog_Szim_FileAppender(const char* filename, const char* fmode = "a");
+		~plog_Szim_FileAppender();
+		void write(const plog::Record& record) override;
+	};
 
+	//--------------------------------------------------------------------
+/*!!
+	class plog_Szim_RollingFileAppender : public plog::IAppender
+	{
+	public:
+		void write(const plog::Record& record) override {
+
+			//!!...
+		}
+	}
+!!*/
+
+	//----------------------------------------------------------------------------
+	inline auto plog_instance(/*!! instance_ID = ...!!*/) {
+		return plog::get(/*!! instance_ID !!*/);
+	}
 
 	//----------------------------------------------------------------------------
 	// Dummy sink for the disabled macros to still allow the LOG << ... syntax:
 	struct NullStream {
 		template<typename T> NullStream& operator<<(const T& /*unused*/) { return *this; }
 	};
+
 } // namespace internal
 
 
 //----------------------------------------------------------------------------
 // API
 //----------------------------------------------------------------------------
-
+// NOTES:
+//
+// - Any public call would implicitly auto-initialize the logging system with
+//   default settings, if it hasn't been initialized yet.
+// - Thread-safe, mutex-guarded init (via the `Initializer` inner class)
 //----------------------------------------------------------------------------
-//!! Integrate into LogMan!...
-inline void init(Level filter_level = normal)
+class LogMan
 {
-	static internal::plog_Szim_ConsoleAppender plogAppender;
+public:
+	// Configuration parameterrs for initializing the logger
+	struct Cfg
+	{
+		Level filter_level = normal;
+		std::string target; // empty means console
+		std::string fopen_mode = "a"; // use "w+" to truncate
+	};
 
-	//!!?? Not needed on modern Windows configs any more?!
-	//!!??diag::enableAnsiColorsOnWindowsConsole();
+private:
+	static inline bool initialized = false;
+	static inline plog::util::Mutex init_mutex; // Nice: PLOG has its own lightweight mutex impl.; we can avoid #include <mutex>!
 
-	plog::init(static_cast<plog::Severity>(filter_level), &plogAppender);
-/*
-	LOGD << "debug detail log entry" << " test";
-	LOGI << "debug info log entry" << " test";
-	LOGN << "notice log entry" << " test";
-	LOGW << "warning log entry" << " test";
-	LOGE << "error log entry" << " test";
-	LOGF << "fatal error log entry" << " test";
-	LOG  << "default log entry" << " test";
-*/
-}
+	// Utility class to encapsulate the thread-safe init logic
+	class Initializer
+	{
+	public:
+		static void init(const Cfg& cfg, bool explicit_init) {
+			plog::util::MutexLock lock(init_mutex);
+			if (!initialized) {
+				__do_init(cfg);
+				initialized = true;
+				__report_after_init(cfg, explicit_init);
+			}
+		}
+	private:
+		//--------------------------------------------------------------------
+		// - These helpers are ONLY ever called from within a locked critical section,
+		//   so no need to worry about thread safety here!
+		//
+		// -  They also need to be static, because this entire class is used also inside ctor
+		//    (not just LogMan::init), i.e. when there's no fully constructed instance yet!
+		static void __do_init(const Cfg& cfg) {
+			plog::IAppender* appender = nullptr;
+			if (cfg.target.empty()) {
+				static internal::plog_Szim_ConsoleAppender console_appender;
+				appender = &console_appender;
+			} else {
+				static internal::plog_Szim_FileAppender file_appender(cfg.target.c_str(), cfg.fopen_mode.c_str());
+				appender = &file_appender;
+			}
+			plog::init(static_cast<plog::Severity>(cfg.filter_level), appender);
+		}
 
+		static void __report_after_init(const Cfg& cfg, bool explicit_init) { // true: non-default explicit init
+			// NOTE:
+			// - NO SZ_LOG... here: the init sequence has not finished yet! :-o (Using them would
+			//   be a recursion into a locked section with no lock release ever...)
+			// - The default filter level (set in the ctor) and the level used here (LOGN, a.k.a
+			//   PLOGI now) should be kept consistent!
+			if (!explicit_init) {
+				//!!SZ_LOGN — see the comment above!
+				PLOGI << "Logger implicitly initialized with defaults.";
+			} else {
+				//!! Query directly from the logger, don't just repeat the "wishful config"!
+				const char* target = cfg.target.empty() ? "console" : cfg.target.c_str();
+				//!!SZ_LOGN — see the comment above!
+				PLOGI << "Logger initialized. (Filter level: " << level_to_str(cfg.filter_level, true)
+						<< " (" << level_to_letter(cfg.filter_level) << ")"
+						<< ", target: " << target
+						<< ")";
+			}
+		}
+	}; // class Initializer
 
-//----------------------------------------------------------------------------
-struct LogMan {
-        LogMan() { instance(); }
-	inline static LogMan* instance();
+public:
+	//--------------------------------------------------------------------
+	// The default ctor. is triggered by the first call of instenca(), and
+	// will perform default initialization, but ONLY if an explicit init()
+	// hasn't been called yet.
+	explicit LogMan() {
+		Cfg default_cfg;
+#ifdef NDEBUG
+		default_cfg.filter_level = normal;
+#else
+		default_cfg.filter_level = debug;
+#endif
+		Initializer::init(default_cfg, false); // false: default implicit init
+	}
 
-	void set_level(/*!! instance_ID = ..., !!*/Level level) {
-		internal::plog_instance(/*!!instance_ID!!*/)->setMaxSeverity(internal::level_to_severity(level));
+	//--------------------------------------------------------------------
+	// Primary, explicit initializer for the logging facility
+	static void init(const Cfg& cfg) {
+		Initializer::init(cfg, true); // true: non-default explicit init
+	}
+
+	//--------------------------------------------------------------------
+	// Returns a pointer to an initialized instance.
+	// Implicitly triggers default init (via the constructor) if called
+	// for the first time, and init() has not been called before.
+ 	static LogMan* instance(/*!! instance_ID = ... !!*/) { //!! Reconcile the semantics with plog_instance() above!...
+		static LogMan logman;
+		return &logman;
+	}
+
+	//--------------------------------------------------------------------
+	// Setup method to change the log level at run-time
+	//!! There will be more like this (as well as a setup(cfg), possibly even supporting retrageting)!
+	static void set_level(/*!! instance_ID = ..., !!*/Level level) {
+		instance()->__set_level(level);
 		if (level >= notice) {
-			SZ_LOGN   << "Log level updated to \"" << level_to_str(level, true) // true: verbose
+			SZ_LOGN   << "Log level updated to \"" << level_to_str(level, true)
 			          << "\" (" << level_to_letter(level) << ")";
 		} else {
-			std::cerr << "Log level updated to \"" << level_to_str(level, true) // true: verbose
-			          << "\" (" << level_to_letter(level) << ")" << std::endl;
+			SZ_LOG_IOS_NS::cerr << "Log level updated to \"" << level_to_str(level, true)
+			          << "\" (" << level_to_letter(level) << ")" << SZ_LOG_IOS_NS::endl;
 		}
 	}
-};
 
-namespace internal { static inline LogMan _logman_instance; }
+protected:
+	//--------------------------------------------------------------------
+	void __set_level(Level level) {
+		internal::plog_instance(/*!!instance_ID!!*/)->setMaxSeverity(internal::level_to_severity(level));
+	}
 
-	inline LogMan* LogMan::instance() {
-		// This static bool ensures plog::init is effectively called only once
-		// by this auto-initialization mechanism, even if the header were processed
-		// in a way that might theoretically try to construct this more than once
-		// (which 'inline static' should prevent for the object itself).
-		static bool initialized = false;
 
-		if (!initialized) {
-#ifdef NDEBUG
-			auto default_log_level = normal;
-#else	
-			auto default_log_level = debug;
-#endif
-			// Open the default log(s — well, only the console for now...):
-			init(default_log_level);
-//			init(default_log_level, "Szim-debug.log");
-			
-			// Optional: Add a console appender for immediate visibility
-			// static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
-			// if (plog::get()) { // Check if get() returns a valid logger
-			//    plog::get()->addAppender(&consoleAppender);
-			// }
+	//--------------------------------------------------------------------
+	// Prevent accidental copying:
+	LogMan(const LogMan&) = delete;
+	LogMan& operator=(const LogMan&) = delete;
+	LogMan(LogMan&&) = delete;
+	LogMan& operator=(LogMan&&) = delete;
 
-			//!! Add condition to switch to `std::cerr << ... << std::endl;` if
-			//!! default_log_level ever gets too tight to include log::notices!
-			SZ_LOGN << "Default logger initialized. ("
-				<< "Filter level: " << level_to_str(default_log_level, true) // true: verbose
-				<< " (" << level_to_letter(default_log_level) << ")"
-				//<< ", file: " << AUTO_PLOG_FILENAME
-				<< ")";
-			
-			initialized = true;
-		}
-		return &internal::_logman_instance; //!! Not yet having a state at all, but preparing for that with this...
-        }
+}; // class LogMan
 
 
 } // namespace log
 } // namespace sz
+
+
+#ifndef SZ_LOG_BUILD
+#include "log.cc"
+#endif
 
 
 #endif // _SDDOSIFUGHODIUGHUC4V509485767N80YTG_

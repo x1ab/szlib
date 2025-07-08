@@ -1,6 +1,14 @@
-﻿Replaced the local #include <plog/...> paths with "..." and with "../..."
-for the ones in subdirs, so that my prefix/proxy header can simply #include
-"plog/Log.h", and everything just works, without any build config gymnastics.
+﻿Replaced plog's own original #include <plog/part> paths anchored to a build-
+time configured base with the non-bracketed, self-anchored "part" (and with
+"../part" for the ones in subdirs), so that my adapter header can simply
+#include "plog/Log.h", and everything just keeps working, without any build
+config gymnastics.
 
-(Alas, that could trigger "woah, ".." in include path!" warnings in some
-anal mode of certain compilers.)
+- This might trigger "woah, '..' in the include path!" warnings in some
+  anal mode of certain compilers. (Haven't seen it with MSVC/GCC max warning
+  levels though.)
+
+- Since the actual search semantics of "" and <> are, strictly speaking,
+  actually undefined (wow), this may prove to be restrictive with some
+  obscure compiler env. (with no filesystem or something equally esoteric)
+  one day. But if it ever happens, let that be a problem of the C std. :-p
