@@ -15,7 +15,13 @@ class File
 protected:
 	explicit File(std::FILE* h) : f_(h), autoclose(false)  {}
 public:
+
+
+#ifndef _MSC_VER
 	explicit File(const char* name, const char* flags = "rb") { f_ = std::fopen(name, flags); }
+#else
+	explicit File(const char* name, const char* flags = "rb") { fopen_s(&f_, name, flags); }
+#endif
 	~File() { if (autoclose && f_) std::fclose(f_); }
 	File(const File&) = delete;
 	operator bool () const { return f_ && !std::ferror(f_) && eof(); }
