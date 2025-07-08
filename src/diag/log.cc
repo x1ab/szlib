@@ -62,7 +62,7 @@ namespace internal
 	}
 
 
-	void plog_Szim_ConsoleAppender::write(const plog::Record& record) //override
+	SZ_LOG_INLINE void plog_Szim_ConsoleAppender::write(const plog::Record& record) //override
 	{
 		// [timestamp]
 		char time_buf[40]; // = ""; not needed, as long as it's always populated!
@@ -159,7 +159,7 @@ namespace internal
 	} // write()
 
 
-	plog_Szim_FileAppender::plog_Szim_FileAppender(const char* filename, const char* fmode)
+	SZ_LOG_INLINE plog_Szim_FileAppender::plog_Szim_FileAppender(const char* filename, const char* fmode)
 	{
 #ifdef _MSC_VER
 		fopen_s(&f, filename, fmode);
@@ -168,12 +168,12 @@ namespace internal
 #endif
 	}
 
-	plog_Szim_FileAppender::~plog_Szim_FileAppender()
+	SZ_LOG_INLINE plog_Szim_FileAppender::~plog_Szim_FileAppender()
 	{
 		if (f) { fclose(f); }
 	}
 
-	void plog_Szim_FileAppender::write(const plog::Record& record) //override
+	SZ_LOG_INLINE void plog_Szim_FileAppender::write(const plog::Record& record) //override
 	{
 		if (!f) return;
 

@@ -144,7 +144,7 @@ namespace internal {
 	class plog_Szim_ConsoleAppender : public plog::IAppender
 	{
 	public:
-		void write(const plog::Record& record) override;
+		SZ_LOG_INLINE void write(const plog::Record& record) override;
 	}; // class plog_Szim_ConsoleAppender
 
 /*!!?? Not needed on modern Windows configs any more?
@@ -172,9 +172,9 @@ namespace internal {
 	{
 		FILE* f = nullptr;
 	public:
-		explicit plog_Szim_FileAppender(const char* filename, const char* fmode = "a");
-		~plog_Szim_FileAppender();
-		void write(const plog::Record& record) override;
+		SZ_LOG_INLINE explicit plog_Szim_FileAppender(const char* filename, const char* fmode = "a");
+		SZ_LOG_INLINE ~plog_Szim_FileAppender();
+		SZ_LOG_INLINE void write(const plog::Record& record) override;
 	};
 
 	//--------------------------------------------------------------------
