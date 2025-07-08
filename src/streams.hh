@@ -10,7 +10,8 @@
 #include <concepts>
 #include <type_traits>
 
-namespace std { class ios_base; } // Just to accept & ignore them!
+#include <iosfwd> // Or (before #7): namespace std { class ios_base; } // Just to accept & ignore them!
+
 namespace sz
 {
 //////////////////////////////////
