@@ -5,6 +5,7 @@
 #include "sys/file.hh"
 
 #include <string>
+#include <string_view>
 #include <utility> // forward, decay
 #include <concepts>
 #include <type_traits>
@@ -41,7 +42,7 @@ class IStream : virtual public Stream { public: using Stream::Stream; };
 template <typename T, typename = void> struct _format
 {
 	static constexpr const char* fmt = "%s";
-	static constexpr const char* conv(T) { return "<<<UNKNOWN TYPE>>>"; }
+	static constexpr const char* conv(T) { return "<<<sz::Stream: UNKNOWN TYPE for output formatting!>>>"; }
 };
 
 #define _DEF_STREAM_TRAIT_(Type, ConvArgT, Fmt, PrintT, Expr) template <> struct _format<Type> { \
@@ -49,6 +50,7 @@ template <typename T, typename = void> struct _format
 	static constexpr PrintT conv([[maybe_unused]] ConvArgT x) { return static_cast<PrintT>(Expr); } }
 
 // Extend as needed...:
+//! std::string & string_view support is implemented without the macro; see below!
 _DEF_STREAM_TRAIT_(const char*,   const char*,   "%s",  const char*, x);
 _DEF_STREAM_TRAIT_(char*,         char*,         "%s",  const char*, x);
 _DEF_STREAM_TRAIT_(char,          char,          "%c",  char, x);
@@ -63,8 +65,10 @@ _DEF_STREAM_TRAIT_(const void*,   const void*,   "%p",  const void*, x);
 _DEF_STREAM_TRAIT_(void*,         const void*,   "%p",  const void*, x);
 #undef _DEF_STREAM_TRAIT_
 
-// Disable the simple formatting method for std::string:
+// Disable the simple formatting method for std::string and string_view; they have
+// their own op<< (see below)!
 template <> struct _format<std::string> { static constexpr void* fmt = nullptr; };
+template <> struct _format<std::string_view> { static constexpr void* fmt = nullptr; };
 
 // Traits to detect iomanip-like functions...
 //using IOManip = Stream& (*)(Stream&);
@@ -96,7 +100,8 @@ OStream& operator << (OStream& out, T&& x) {
 	return out;
 }
 
-inline OStream& operator << (OStream& out, const std::string& x) { out.write(x.data(), x.size()); return out; }
+inline OStream& operator << (OStream& out, const std::string& x)      { out.write(x.data(), x.size()); return out; }
+inline OStream& operator << (OStream& out, const std::string_view& x) { out.write(x.data(), x.size()); return out; }
 
 //////////////////////////////////
 class StringStream : public OStream, public IStream
