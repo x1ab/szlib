@@ -13,7 +13,7 @@ DEBUG = 0
 CRT = static
 
 #--- PRJ DEFINITIONS ---------------------------------------------------------
-SZ_APP_NAME ?= bb-build-test
+SZ_APP_NAME ?= smoke-test
 SZ_PRJ_DIR  ?= .
 SZ_SRC_SUBDIR ?= src
 SZ_OUT_SUBDIR ?= .tmp/build

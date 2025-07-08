@@ -1,8 +1,1 @@
-﻿The build is completely broken!
-
-Both the lib build (no lib, no test main; doesn't put anything to `./release`,
-which it won't even try to create - the current Makefile is not yet adapted!),
-and the (one existing) test case build, too!....
-
-Also, the current lib build (Makefile) still uses PDPMake from BusyBox, not
-gnumake, even though it's already the tool for the test cases...
+﻿(Don't forget to move actionable items to issues before addressing them (for traceability)!)
