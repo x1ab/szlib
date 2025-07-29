@@ -19,7 +19,7 @@
 
 #define _TODO_VEC_NO_OPEQ_FOREIGN
 	//!! Re-evaluate & comment why was this needed: for the "only 1 user conv." rule? -> #20!
-	//!! (The current tests, sfw2, and oon compile & run apparently fine without it
-	//!! at least with GCC! But I may just not have an actual use cases yet...)
+	//!! (The current tests, mycoGUI, and OON compile & run apparently fine without it,
+	//!! at least with GCC! But I may just not have an actual use case yet...)
 
 #endif // _DFO8ER7NYDH0M85FYNFPNIKYUHM8R067NI_

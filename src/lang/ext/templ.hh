@@ -1,11 +1,10 @@
 ﻿#ifndef _DIOUNYWDIURBT570398FNY387NF8CU6DF344_
 #define _DIOUNYWDIURBT570398FNY387NF8CU6DF344_
 
-
 #include <utility> // declval
 #include <type_traits> // invoke_result_t, type_identity
 
-namespace sfw::internal {
+namespace sz::internal {
 
 		template<typename T, auto = []{}>
 		struct type_defined: std::bool_constant<requires { sizeof(T); }> {};
@@ -51,6 +50,6 @@ namespace sfw::internal {
 		}
 	*/
 
-} // namespace sfw::internal
+} // namespace sz::internal
 
 #endif // _DIOUNYWDIURBT570398FNY387NF8CU6DF344_
