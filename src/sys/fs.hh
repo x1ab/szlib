@@ -1,4 +1,4 @@
-// v0.1.1 + negligible cosmetics
+// v0.1.2
 
 #ifndef _LSF39847G45796GK890G676G42GF35_
 #define _LSF39847G45796GK890G676G42GF35_
@@ -49,27 +49,28 @@ inline std::string endslash_fixup(const std::string& dirpath)
 
 // Path prefixing with heuristics to only apply the prefix to paths
 // that were "probably intended" for it...
+// - cwd_rel_not_prefixed (true by default): also don't prefix
+//   relative paths that are relative to the CWD (.)
 // The args can be string, string_view or const char* (-- for the latter see
 // the corresponding partially specialized template below the main one!)
 template <class Str, typename StrOrCharPtr>
 std::string prefix_if_rel(const StrOrCharPtr& prefix, Str path,
-                          bool cwd_not_prefixed = true, bool ignore_backslash = false)
+                          bool cwd_rel_not_prefixed = true, bool ignore_backslash_as_path_sep = false)
 {
 #ifdef _WIN32
-#  define OR_BACKSLASH_TOO_ON_WINDOWS(ndx) || path[ndx] == '\\' && !ignore_backslash
+#  define OR_BACKSLASH_TOO_ON_WINDOWS(char) || char == '\\' && !ignore_backslash_as_path_sep
 #  define _P_SEP_ '\\'
 #else
-#  define OR_BACKSLASH_TOO_ON_WINDOWS(ndx)
+#  define OR_BACKSLASH_TOO_ON_WINDOWS(char)
 #  define _P_SEP_ '/'
 #endif
 	return std::string( // Required for the overly orthodox string_view API... :-/
-	     path.length() > 0 && (path[0] == '/' OR_BACKSLASH_TOO_ON_WINDOWS(0)) ||
-             path.length() > 1 && (path[1] == ':') ||
-	     (cwd_not_prefixed && ( // Special-casing ., ./whatever, .\whatever, but not .anything_else
+	     path.length() > 0 && (path[0] == '/' OR_BACKSLASH_TOO_ON_WINDOWS(path[0])) ||
+             path.length() > 1 && (path[1] == ':') || //!! Unwrapped Windows-specific cond.!!
+	     (cwd_rel_not_prefixed && ( // Also ., ./whatever, .\whatever, but not .anything_else:
                path.length() == 1 && (path[0] == '.') ||
-               path.length() > 1  && (path[0] == '.') && (path[1] == '/' OR_BACKSLASH_TOO_ON_WINDOWS(1))
+               path.length() > 1  && (path[0] == '.') && (path[1] == '/' OR_BACKSLASH_TOO_ON_WINDOWS(path[1]))
              ))
-
 	     ? path
 	     : (std::filesystem::path(prefix) /= path).string()
 	);
@@ -81,10 +82,10 @@ std::string prefix_if_rel(const StrOrCharPtr& prefix, Str path,
 
 template <typename StrOrCharPtr> // 'path' can be string or string_view, prefix can also be const char*
 std::string prefix_if_rel(const StrOrCharPtr& prefix, const char* path,
-                          bool cwd_not_prefixed = true, bool ignore_backslash = false)
+                          bool cwd_rel_not_prefixed = true, bool ignore_backslash_as_path_sep = false)
 {
 	return prefix_if_rel(std::forward<const StrOrCharPtr&>(prefix), std::string_view(path),
-	                     cwd_not_prefixed, ignore_backslash);
+	                     cwd_rel_not_prefixed, ignore_backslash_as_path_sep);
 }
 
 }; // namespace sz
