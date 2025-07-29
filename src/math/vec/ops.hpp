@@ -15,6 +15,10 @@ namespace VEC_NAMESPACE {
 #define _VEC_STANDALONE_BIVECT_FN_(Name) \
 	template <UniformVectorData V1, UniformVectorData V2> requires VectorData_SameDim<V1, V2> \
 	constexpr auto Name (const V1& v1, const V2& v2)
+// OMFG, this explicit bool version (instead of the auto above) is required for Clang to even compile the op==!
+#define _VEC_STANDALONE_BIVECT_FN_BOOL_(Name) \
+	template <UniformVectorData V1, UniformVectorData V2> requires VectorData_SameDim<V1, V2> \
+	constexpr bool Name (const V1& v1, const V2& v2)
 // Mixed vector vs. scalar op. helpers:
 #define _VEC_STANDALONE_VECT_SCALAR_FN_(Name) template <UniformVectorData V, Scalar N> \
 	constexpr auto Name (const V& v, N n)
@@ -33,7 +37,7 @@ namespace VEC_NAMESPACE {
 //!!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!!
 
 
-_VEC_STANDALONE_BIVECT_FN_(operator ==);
+_VEC_STANDALONE_BIVECT_FN_BOOL_(operator ==);
 
 // Pairwise ops...
 _VEC_STANDALONE_BIVECT_FN_(operator +);
@@ -65,6 +69,7 @@ _VEC_STANDALONE_VECT_SCALAR_FN_(operator /);
 
 #undef _VEC_STANDALONE_SCALAR_VECT_FN_
 #undef _VEC_STANDALONE_VECT_SCALAR_FN_
+#undef _VEC_STANDALONE_BIVECT_FN_BOOL_
 #undef _VEC_STANDALONE_BIVECT_FN_
 
 #endif // _HCVN987STD80FT7NT7GMYIURTFTYGNJKLRV_

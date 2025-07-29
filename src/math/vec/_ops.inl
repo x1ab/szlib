@@ -181,7 +181,7 @@ _VEC_MEMBER_FN_(Self, rounded) () const
 		}(v, n, std::make_integer_sequence<unsigned, V::dim>{}); \
 	}
 
-_VEC_STANDALONE_BIVECT_FN_(operator ==) {
+_VEC_STANDALONE_BIVECT_FN_BOOL_(operator ==) {
 // -> #60: Compilations have been ridden with landmines
 //         without finally having this explicitly defined.
 	using Common = std::common_type<typename V1::number_type, typename V2::number_type>;
