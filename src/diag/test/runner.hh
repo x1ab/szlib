@@ -1,4 +1,4 @@
-// v0.1.0
+// v0.2.2
 
 #ifndef _SZXCVBN3807R5YT68FNUGVHM678_
 #define _SZXCVBN3807R5YT68FNUGVHM678_
@@ -20,6 +20,7 @@ int main()
 		.run( In{ ""  }, Expect{ false } )
 		.run( In{ " " }, Expect{ false } )
 		.run( In{ "/" }, Expect{ true }  )
+		.skip( In{ "nothing" }, Expect{"good things"} , "Not implemented!" ) // The reason is optional
 	;
 
 	OR, using a wrapper to provide insight into what each test case does:
@@ -156,12 +157,14 @@ template<typename... Ts> using Expect = TupleFromBraces<Ts...>;
 template<typename T>     struct using_that_fkn_tuple : std::false_type {};
 template<typename... Ts> struct using_that_fkn_tuple<TupleFromBraces<Ts...>> : std::true_type {};
 
-enum RunFlags : int {
-//!! Too much collision risk with `using namespace test` if unqualified...:
-		RunFlags_Defaults = 0,
+
+//----------------------------------------------------------------------------
+enum TestFlags : int {                 //!! Too much collision risk for just `Flags` if `using namespace test`...
+		Test_Defaults = 0,     //!! Too much collision risk for just `Defaults` if `using namespace test`...
 		Stop_On_Failure = 1,
-		No_Auto_Summary = 2, // Call test.report() manually for a summary.
-//		... = 4,
+		Stop_On_RuntimeError = 2, //!!TODO
+		No_Auto_Summary = 4, // Call test.report() manually for a summary.
+		//... = 8,
 };
 
 //----------------------------------------------------------------------------
@@ -172,22 +175,29 @@ struct Test
 	// Config:
 	std::function<Signature> f; // Copy semantics for now, to allow replacing!
 	std::string batch_name;
- 	RunFlags flags;
+	TestFlags flags;
+
+	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
+	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
+	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
+
 	// State:
-	int cases_run = 0, cases_failed = 0;
+	int	cases_total = 0,
+		cases_run = 0,
+		cases_failed = 0,  // run, but failed
+		cases_skipped_explicitly = 0, // not run, because explicitly skip()ed
+		cases_skipped_implicitly = 0; // skipped due to runtime error, or Stop_on_Failure etc.
+
 	bool reported = false;
 
+	//--------------------------------------------------------------------
 	template<typename Fn>
-	Test(Fn&& f, std::string_view name = "", RunFlags flags = RunFlags_Defaults)
+	Test(Fn&& f, std::string_view name = "", TestFlags flags = Test_Defaults)
         	: f(std::forward<Fn>(f))
 		, batch_name(name.empty() ? __func__ : name)
 		, flags(flags)
 	{
-		std::cerr
-			<< "------------------------------------------------------------------------------\n"
-			<< " Test batch \""<< batch_name <<"\"...\n"
-			<< "------------------------------------------------------------------------------\n"
-		;
+		show_header();
 	}
 
 	~Test()
@@ -196,7 +206,7 @@ struct Test
 			&& !reported) report();
 	}
 
-	/* Since the callable type (of f) is frozen at comp. time, this is pretty much pointless:
+	/*!! Since the callable type (of f) is frozen at comp. time, this is pretty much pointless:
 	template<typename Fn>
 		requires std::convertible_to<Fn, std::function<Signature>>	
 	auto& set(Fn&& f)
@@ -205,39 +215,16 @@ struct Test
 		std::cerr << "---- The test-subject callable has been replaced. ----\n";
 		return *this;
 	}
-	*/
+	!!*/
 
-	auto& report(bool silence_the_dtor = true)
-	{
-		if (!cases_failed) {
-			std::cerr // << "\n" // Trust the prev. run() outputs to always end with \n...
-				<< "------------------------------------------------------------------------------\n"
-				<< " ALL OK. (Cases run: " << cases_run << ")"
-				<< "\n"
-				<< "------------------------------------------------------------------------------\n"
-			;
-		} else { 
-			std::cerr // << "\n" // Trust the prev. run() outputs to always end with \n...
-				<< "------------------------------------------------------------------------------\n"
-				<< " --->>> "<< cases_failed <<" case"<< (cases_failed>1 ? "s":"") <<" FAILED!!!"
-				<< " ("<< (float(cases_failed)/cases_run * 100.f) <<"%"
-				<< " of "<< cases_run <<" case"<< (cases_run>1 ? "s":"") <<" run)"
-				<< "\n"
-				<< "------------------------------------------------------------------------------\n"
-			;
-		}
-		if (silence_the_dtor) reported = true;
-
-		return *this;
-	}
-
+	//--------------------------------------------------------------------
 	template <class Input, class ExpectedT>
 	auto& run(const Input& input, const ExpectedT& expected)
-//!!		requires requires { []<typename... Args>(const TupleFromBraces<Args...>&){}(expected); }
-			//! ...Instead of the missing std::is_specialization_of... No comment; just "modern C++".
 		requires using_that_fkn_tuple<std::decay_t<ExpectedT>>::value
-// This makes the GCC error worse than the static_assert below:
-//			&& is_applicable_v<std::function<Signature>, decltype(input.values)>
+		//!!requires requires { []<typename... Args>(const TupleFromBraces<Args...>&){}(expected); }
+			//! ...Instead of the missing std::is_specialization_of... No comment; just "modern C++".
+			//!! GCC constraint errors are worse than failed static_asserts, BTW:
+			//&& is_applicable_v<std::function<Signature>, decltype(input.values)>
 	{
 		if (!__prepare_tc_run())
 			return *this;
@@ -275,11 +262,11 @@ struct Test
 
 	template <class Input, typename ExpectedT>
 	auto& run(const Input& input, const ExpectedT& expected)
-//!!		requires (!requires { []<typename... Args>(const TupleFromBraces<Args...>&){}(expected); })
-			//! ...Instead of the missing std::is_specialization_of... No comment; just "modern C++".
 		requires (!using_that_fkn_tuple<std::decay_t<ExpectedT>>::value)
-// This makes the GCC error worse than the static_assert below:
-//			&& is_applicable_v<std::function<Signature>, decltype(input.values)>
+		//!!requires (!requires { []<typename... Args>(const TupleFromBraces<Args...>&){}(expected); })
+			//! ...Instead of the missing std::is_specialization_of... No comment; just "modern C++".
+			//!! GCC constraint errors are worse than failed static_asserts, BTW:
+			// && is_applicable_v<std::function<Signature>, decltype(input.values)>
 	{
 		if (!__prepare_tc_run())
 			return *this;
@@ -297,33 +284,117 @@ struct Test
 		return *this;
 	}
 
-protected:
-	bool __prepare_tc_run() {
-		if (flags & Stop_On_Failure && cases_failed) {
-			return false;
+	//--------------------------------------------------------------------
+	//!! Or: ignore(), just to distinguish more from "implicitly skipped"?...
+	//!! But then there would be hopeless ambiguity whether "ignored" is also "skipped"... :)
+	template <class Input, typename ExpectedT>
+	auto& skip(const Input& input, const ExpectedT& expected, std::string_view reason = "")
+	{
+		__prepare_tc_run(false, reason);
+		return *this;
+	}
+
+	//--------------------------------------------------------------------
+	auto& show_header()
+	{
+		std::cerr
+			<< _B______NL
+			<< " Test batch \""<< batch_name <<"\"...\n"
+			<< ________NL
+		;
+		return *this;
+	}
+
+	//--------------------------------------------------------------------
+	auto& report(bool silence_the_dtor = true)
+	{
+		assert(cases_total == cases_run + __cases_skipped());
+
+		if (!cases_failed) {
+			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
+				<< ________NL
+				<< " ALL OK."
+				<< " ("
+				<<	"Run: " << cases_run
+				<<	(cases_run == cases_total ? "" : " of " + std::to_string(cases_total)
+					 + ", skipped: " + std::to_string(__cases_skipped()))
+				<< ")"
+				<< "\n"
+				<< _E______NL
+			;
 		} else {
+			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
+				<< ________NL
+				<< "\n"
+				<< "\t--->>> "<< cases_failed <<" case"<< (cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
+				<< " ("
+				<<	(float(cases_failed)/cases_run * 100.f) <<"%"
+//				<<		" of "<< cases_run <<" case"<< (cases_run>1 ? "s":"") <<" run"
+				<<		" of "<< cases_run <<" run"
+				<<		(__cases_skipped() ? ", skipped: " + std::to_string(__cases_skipped()): "")
+				<< ")"
+				<< "\n\n"
+				<< _E______NL
+			;
+		}
+		if (silence_the_dtor) reported = true;
+
+		return *this;
+	}
+
+protected:
+	bool __prepare_tc_run(std::string_view comment = "") { return __prepare_tc_run(true, comment); }
+	bool __prepare_tc_run(bool run_mode, std::string_view comment = "")
+	{
+		++cases_total;
+		if (flags & Stop_On_Failure && cases_failed) {
+			++cases_skipped_implicitly;
+			return false;
+		}
+
+		if (run_mode) {
 			++cases_run;
-			std::cerr << " #"<< cases_run << ": ";
+			print_tc_id(std::cerr, cases_total);
 			return true;
+		} else { // "explicit skip mode"
+			++cases_skipped_explicitly;
+			std::cerr << "(--- ";
+				print_tc_id(std::cerr, cases_total, 0); // 0: no padding
+			std::cerr
+				<< "SKIPPED"
+				<< (comment.empty() ? "!" : std::string("! ") + std::string(comment))
+			<< " ---)\n";
+			return false;
 		}
 	}
-	bool __handle_tc_result(bool passed) {
+
+	int __cases_skipped() { return cases_skipped_explicitly + cases_skipped_implicitly; }
+
+	bool __handle_tc_result(bool passed)
+	{
 		if (!passed) { ++cases_failed; }
 		std::cerr << (passed ? "\t\t[ok]" : "\t--- [!!! FAILED !!!]") << "\n";
 		return passed;
 	}
+
+	auto& print_tc_id(std::ostream& out, int id, int pad = 5)
+	{
+		out << std::setw(pad) << (std::string("#") + std::to_string(id)) << ": "; // Right-align up to 999...
+		return out;
+	}
+
 }; // class Test
 
-// --- Deduction Guides for deducing Test<Signature> from a ctor call:
+// --- Deduction guides for deducing Test<TestFunc> from a ctor call:
 // - #1: For lambdas and other callables (functors)
 template<typename Fn>
-Test(Fn&& func, std::string_view name = "", RunFlags flags = RunFlags_Defaults)
+Test(Fn&& func, std::string_view name = "", TestFlags flags = Test_Defaults)
 	-> Test<typename function_traits<decltype(&std::decay_t<Fn>::operator())>::signature>;
 
-// - #2: For function pointers
+// - #2: For fn. pointers we can just use the callable type as-is:
 template<typename R, typename... Args>
-Test(R(*)(Args...), std::string_view name = "", RunFlags flags = RunFlags_Defaults)
-	-> Test<R(Args...)>; // Directly construct Test with the clean signature
+Test(R(*)(Args...), std::string_view name = "", TestFlags flags = Test_Defaults)
+	-> Test<R(Args...)>;
 
 } // namespace sz::test
 
