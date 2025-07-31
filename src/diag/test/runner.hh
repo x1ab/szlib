@@ -1,4 +1,4 @@
-// v0.2.2
+// v0.2.3
 
 #ifndef _SZXCVBN3807R5YT68FNUGVHM678_
 #define _SZXCVBN3807R5YT68FNUGVHM678_
@@ -168,25 +168,124 @@ enum TestFlags : int {                 //!! Too much collision risk for just `Fl
 };
 
 //----------------------------------------------------------------------------
+struct TestStats
+{
+	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
+	static constexpr auto _EQ_____NL = "==============================================================================\n";
+	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
+	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
+
+	// State:
+	struct Stats {
+	  int	cases_total = 0,
+		cases_run = 0,
+		cases_failed = 0,  // run, but failed
+		cases_skipped_explicitly = 0, // not run, because explicitly skip()ed
+		cases_skipped_implicitly = 0; // skipped due to runtime error, or Stop_on_Failure etc.
+		int cases_skipped() { return cases_skipped_explicitly + cases_skipped_implicitly; }
+		Stats& operator += (const Stats& rhs) {
+			cases_total  += rhs.cases_total;
+			cases_run    += rhs.cases_run;
+			cases_failed += rhs.cases_failed;
+			cases_skipped_explicitly += rhs.cases_skipped_explicitly;
+			cases_skipped_implicitly += rhs.cases_skipped_implicitly;
+			return *this;
+		}
+	} stats;
+
+	// Accumulated results from all runs in the same thread:
+	thread_local static Stats global_stats; // See its def. below the class!
+
+	//--------------------------------------------------------------------
+	static void report(Stats& stats = TestStats::global_stats)
+	{
+		assert(stats.cases_total == stats.cases_run + stats.cases_skipped());
+
+		if (&stats == &TestStats::global_stats) {
+			report_grand_totals(stats);
+			return;
+		}
+
+		if (!stats.cases_failed) {
+			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
+				<< ________NL
+				<< " ALL OK."
+				<< " ("
+				<<	"Run: " << stats.cases_run
+				<<	(stats.cases_run == stats.cases_total ? "" : " of " + std::to_string(stats.cases_total)
+					 + ", skipped: " + std::to_string(stats.cases_skipped()))
+				<< ")"
+				<< "\n"
+				<< _E______NL
+			;
+		} else {
+			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
+				<< ________NL
+				<< "\n"
+				<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
+				<< " ("
+				<<	std::fixed << std::setprecision(1)
+				<<	(float(stats.cases_failed)/stats.cases_run * 100.f) <<"%"
+				<<	std::defaultfloat
+//				<<		" of "<< stats.cases_run <<" case"<< (stats.cases_run>1 ? "s":"") <<" run"
+				<<		" of "<< stats.cases_run <<" run"
+				<<		(stats.cases_skipped() ? ", skipped: " + std::to_string(stats.cases_skipped()): "")
+				<< ")"
+				<< "\n\n"
+				<< _E______NL
+			;
+		}
+	}
+
+	static void report_grand_totals(Stats& stats)
+	{
+		auto ppad = 25;
+
+		std::cerr << "\n";
+		std::cerr << _EQ_____NL;
+		std::cerr
+			<< " GRAND TOTALS: " << "\n"
+			<<   std::setw(ppad)<<std::left<< "\t- cases:"              <<std::right<<std::setw(4)<< stats.cases_total  <<"\n"
+			<<   std::setw(ppad)<<std::left<< "\t- run:"                <<std::right<<std::setw(4)<< stats.cases_run    <<"\n"
+			<<   std::setw(ppad)<<std::left<< "\t- failed:"             <<std::right<<std::setw(4)<< stats.cases_failed <<"\n"
+			<<   std::setw(ppad)<<std::left<< "\t- explicitly ignored:" <<std::right<<std::setw(4)<< stats.cases_skipped_explicitly <<"\n"
+			<<   std::setw(ppad)<<std::left<< "\t- couldn't run:"       <<std::right<<std::setw(4)<< stats.cases_skipped_implicitly <<"\n"
+		;
+
+		std::cerr << ________NL;
+
+		if (!stats.cases_failed) {
+			std::cerr << " ALL OK." << "\n";
+		} else {
+			std::cerr
+				<< "\n"
+				<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
+				<< " ("
+				<<	std::fixed << std::setprecision(1)
+				<<	(float(stats.cases_failed)/stats.cases_run * 100.f) <<"% of "<< stats.cases_run <<" run, "
+				<<	(float(stats.cases_failed)/stats.cases_total * 100.f) <<"% of all"
+				<<	std::defaultfloat
+				<< ")"
+				<< "\n\n"
+			;
+		}
+		std::cerr << _EQ_____NL;
+	}
+};
+
+// Accumulated results from all runs in the same thread:
+thread_local TestStats::Stats TestStats::global_stats{};
+
+
+//----------------------------------------------------------------------------
 template <typename Signature>
-struct Test
+struct Test : TestStats
 // Run-once, throw-away test runner
 {
 	// Config:
 	std::function<Signature> f; // Copy semantics for now, to allow replacing!
 	std::string batch_name;
 	TestFlags flags;
-
-	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
-	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
-	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
-
-	// State:
-	int	cases_total = 0,
-		cases_run = 0,
-		cases_failed = 0,  // run, but failed
-		cases_skipped_explicitly = 0, // not run, because explicitly skip()ed
-		cases_skipped_implicitly = 0; // skipped due to runtime error, or Stop_on_Failure etc.
 
 	bool reported = false;
 
@@ -202,6 +301,8 @@ struct Test
 
 	~Test()
 	{
+		global_stats += stats;
+
 		if (!(flags & No_Auto_Summary)
 			&& !reported) report();
 	}
@@ -299,46 +400,18 @@ struct Test
 	{
 		std::cerr
 			<< _B______NL
-			<< " Test batch \""<< batch_name <<"\"...\n"
+//!!OLD			<< " Test batch \""<< batch_name <<"\"...\n"
+			<< " TEST: "<< batch_name <<"...\n"
 			<< ________NL
 		;
 		return *this;
 	}
 
 	//--------------------------------------------------------------------
-	auto& report(bool silence_the_dtor = true)
+	auto& report(bool silence_the_dtor = true, Stats* alt_stats = nullptr)
 	{
-		assert(cases_total == cases_run + __cases_skipped());
-
-		if (!cases_failed) {
-			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
-				<< ________NL
-				<< " ALL OK."
-				<< " ("
-				<<	"Run: " << cases_run
-				<<	(cases_run == cases_total ? "" : " of " + std::to_string(cases_total)
-					 + ", skipped: " + std::to_string(__cases_skipped()))
-				<< ")"
-				<< "\n"
-				<< _E______NL
-			;
-		} else {
-			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
-				<< ________NL
-				<< "\n"
-				<< "\t--->>> "<< cases_failed <<" case"<< (cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
-				<< " ("
-				<<	(float(cases_failed)/cases_run * 100.f) <<"%"
-//				<<		" of "<< cases_run <<" case"<< (cases_run>1 ? "s":"") <<" run"
-				<<		" of "<< cases_run <<" run"
-				<<		(__cases_skipped() ? ", skipped: " + std::to_string(__cases_skipped()): "")
-				<< ")"
-				<< "\n\n"
-				<< _E______NL
-			;
-		}
+		TestStats::report(this->stats);
 		if (silence_the_dtor) reported = true;
-
 		return *this;
 	}
 
@@ -346,20 +419,20 @@ protected:
 	bool __prepare_tc_run(std::string_view comment = "") { return __prepare_tc_run(true, comment); }
 	bool __prepare_tc_run(bool run_mode, std::string_view comment = "")
 	{
-		++cases_total;
-		if (flags & Stop_On_Failure && cases_failed) {
-			++cases_skipped_implicitly;
+		++stats.cases_total;
+		if (flags & Stop_On_Failure && stats.cases_failed) {
+			++stats.cases_skipped_implicitly;
 			return false;
 		}
 
 		if (run_mode) {
-			++cases_run;
-			print_tc_id(std::cerr, cases_total);
+			++stats.cases_run;
+			print_tc_id(std::cerr, stats.cases_total);
 			return true;
 		} else { // "explicit skip mode"
-			++cases_skipped_explicitly;
+			++stats.cases_skipped_explicitly;
 			std::cerr << "(--- ";
-				print_tc_id(std::cerr, cases_total, 0); // 0: no padding
+				print_tc_id(std::cerr, stats.cases_total, 0); // 0: no padding
 			std::cerr
 				<< "SKIPPED"
 				<< (comment.empty() ? "!" : std::string("! ") + std::string(comment))
@@ -368,11 +441,9 @@ protected:
 		}
 	}
 
-	int __cases_skipped() { return cases_skipped_explicitly + cases_skipped_implicitly; }
-
 	bool __handle_tc_result(bool passed)
 	{
-		if (!passed) { ++cases_failed; }
+		if (!passed) { ++stats.cases_failed; }
 		std::cerr << (passed ? "\t\t[ok]" : "\t--- [!!! FAILED !!!]") << "\n";
 		return passed;
 	}
@@ -385,7 +456,7 @@ protected:
 
 }; // class Test
 
-// --- Deduction guides for deducing Test<TestFunc> from a ctor call:
+// --- Deduction guides for deducing Test<Signature> from a ctor call:
 // - #1: For lambdas and other callables (functors)
 template<typename Fn>
 Test(Fn&& func, std::string_view name = "", TestFlags flags = Test_Defaults)
@@ -395,6 +466,7 @@ Test(Fn&& func, std::string_view name = "", TestFlags flags = Test_Defaults)
 template<typename R, typename... Args>
 Test(R(*)(Args...), std::string_view name = "", TestFlags flags = Test_Defaults)
 	-> Test<R(Args...)>;
+
 
 } // namespace sz::test
 
