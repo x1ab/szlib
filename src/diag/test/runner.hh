@@ -1,4 +1,4 @@
-// v0.2.3
+// v0.3.0
 
 #ifndef _SZXCVBN3807R5YT68FNUGVHM678_
 #define _SZXCVBN3807R5YT68FNUGVHM678_
@@ -12,24 +12,27 @@ int main()
 	using namespace sz::test;
 
 	Test(
+	// Optional title (the default is made of the file, line, func. of the Test call):
+		"szlib/sys/is_absolute"),
 	// The test subject:
 		is_absolute,
-	// Optional title, flags:
-		"szlib/sys/is_absolute") //, Stop_on_Failure)
-	// Test cases:
+	// Optional flags:
+		Stop_on_Failure)
+	// Cases:
 		.run( In{ ""  }, Expect{ false } )
 		.run( In{ " " }, Expect{ false } )
+		.sep()                                       // With optional text instead of the default dashes.
 		.run( In{ "/" }, Expect{ true }  )
-		.skip( In{ "nothing" }, Expect{"good things"} , "Not implemented!" ) // The reason is optional
+		.skip( In{"nothing"}, Expect{"good things"}, "Not implemented!" ) // The "reason" is optional.
 	;
 
 	OR, using a wrapper to provide insight into what each test case does:
 
-	Test	( [](string_view p) {
+	Test	("is_absolute", [](string_view p) {
 			bool abs = is_absolute(p);
 			cout << "\""<< p <<"\" is "<< (abs ? "absolute" : "relative"); // No trailing \n helps formatting the test output.
 			return abs;
-		}, "is_absolute" )
+		})
 		.run( In{ ""  }, Expect{ false } )
 		.run( In{ " " }, Expect{ false } )
 		.run( In{ "/" }, Expect{ true }  )
@@ -42,8 +45,16 @@ NOTES:
 	The Test destructor will report the summary. If you want that to happen
 	earlier, either call .report() (which will silence the dtor), or, if you
 	don't use the Test().rum(...) idiom, but prefer `Test batch; batch.run(...)`,
-	then put `batch` into a scope with the closing } being the reporting point.
+	then put `batch` into a scope with the closing } triggering the summary report.
 
+	The stats from multiple Test() batches in the same thread are accumulated
+	in a static instance, and can be reported by
+
+		TestStats::report()
+
+	usually when all the test have been run. The global stats can be cleared with:
+
+		TestStats::reset()
 */
 
 /*!!TODO: Sg. like this (but such tables are rigid against optional per-TC props!):
@@ -86,6 +97,9 @@ NOTES:
 #include <utility> // forward, decay
 #include <type_traits> // false_type, true_type
 #include <iostream>
+#include <iomanip>
+#include <source_location>
+#include <cassert>
 
 namespace sz::test {
 
@@ -159,18 +173,19 @@ template<typename... Ts> struct using_that_fkn_tuple<TupleFromBraces<Ts...>> : s
 
 
 //----------------------------------------------------------------------------
-enum TestFlags : int {                 //!! Too much collision risk for just `Flags` if `using namespace test`...
+enum TestFlags {                       //!! Too much collision risk for just `Flags` if `using namespace test`...
 		Test_Defaults = 0,     //!! Too much collision risk for just `Defaults` if `using namespace test`...
-		Stop_On_Failure = 1,
-		Stop_On_RuntimeError = 2, //!!TODO
-		No_Auto_Summary = 4, // Call test.report() manually for a summary.
-		//... = 8,
+//!!		Silent_Success       = 1, //!! Requires output buffering!
+		Stop_On_Failure      = 2,
+//!!		Stop_On_RunError     = 4,
+		No_Auto_Summary      = 8, // Call test.report() manually for a summary.
 };
 
 //----------------------------------------------------------------------------
 struct TestStats
 {
 	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
+	static constexpr auto _SEP____NL = " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n";
 	static constexpr auto _EQ_____NL = "==============================================================================\n";
 	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
 	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
@@ -206,37 +221,49 @@ struct TestStats
 			return;
 		}
 
-		if (!stats.cases_failed) {
-			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
-				<< ________NL
-				<< " ALL OK."
-				<< " ("
-				<<	"Run: " << stats.cases_run
-				<<	(stats.cases_run == stats.cases_total ? "" : " of " + std::to_string(stats.cases_total)
-					 + ", skipped: " + std::to_string(stats.cases_skipped()))
-				<< ")"
-				<< "\n"
-				<< _E______NL
-			;
-		} else {
-			std::cerr // << "\n" // Trust the prev. run/skip outputs to always end with \n...
-				<< ________NL
-				<< "\n"
-				<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
-				<< " ("
-				<<	std::fixed << std::setprecision(1)
-				<<	(float(stats.cases_failed)/stats.cases_run * 100.f) <<"%"
-				<<	std::defaultfloat
-//				<<		" of "<< stats.cases_run <<" case"<< (stats.cases_run>1 ? "s":"") <<" run"
-				<<		" of "<< stats.cases_run <<" run"
-				<<		(stats.cases_skipped() ? ", skipped: " + std::to_string(stats.cases_skipped()): "")
-				<< ")"
-				<< "\n\n"
-				<< _E______NL
-			;
+		if (stats.cases_total) {
+
+			std::cerr << ________NL; // Trust the prev. run/skip outputs to always end with \n...
+
+			if (!stats.cases_failed) {
+				std::cerr
+					<< " ALL OK."
+					<< " ("
+					<<	"Run: " << stats.cases_run
+					<<	(stats.cases_run == stats.cases_total ? "" : " of " + std::to_string(stats.cases_total)
+						+ ", skipped: " + std::to_string(stats.cases_skipped()))
+					<< ")"
+					<< "\n"
+				;
+			} else {
+				std::cerr
+					<< "\n"
+					<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
+					<< " ("
+					<<	std::fixed << std::setprecision(1)
+					<<	(float(stats.cases_failed)/float(stats.cases_run) * 100) <<"%"
+					<<	std::defaultfloat
+	//				<<		" of "<< stats.cases_run <<" case"<< (stats.cases_run>1 ? "s":"") <<" run"
+					<<		" of "<< stats.cases_run <<" run"
+					<<		(stats.cases_skipped() ? ", skipped: " + std::to_string(stats.cases_skipped()): "")
+					<< ")"
+					<< "\n\n"
+				;
+			}
 		}
+		std::cerr << _E______NL;
 	}
 
+	//--------------------------------------------------------------------
+	static void reset()
+	{
+		global_stats = Stats{};
+	}
+
+	//--------------------------------------------------------------------
+	// Internals...
+	//--------------------------------------------------------------------
+protected:
 	static void report_grand_totals(Stats& stats)
 	{
 		auto ppad = 25;
@@ -252,22 +279,25 @@ struct TestStats
 			<<   std::setw(ppad)<<std::left<< "\t- couldn't run:"       <<std::right<<std::setw(4)<< stats.cases_skipped_implicitly <<"\n"
 		;
 
-		std::cerr << ________NL;
+		if (stats.cases_total) {
 
-		if (!stats.cases_failed) {
-			std::cerr << " ALL OK." << "\n";
-		} else {
-			std::cerr
-				<< "\n"
-				<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
-				<< " ("
-				<<	std::fixed << std::setprecision(1)
-				<<	(float(stats.cases_failed)/stats.cases_run * 100.f) <<"% of "<< stats.cases_run <<" run, "
-				<<	(float(stats.cases_failed)/stats.cases_total * 100.f) <<"% of all"
-				<<	std::defaultfloat
-				<< ")"
-				<< "\n\n"
-			;
+			std::cerr << ________NL;
+
+			if (!stats.cases_failed) {
+				std::cerr << " ALL OK." << "\n";
+			} else {
+				std::cerr
+					<< "\n"
+					<< "\t--->>> "<< stats.cases_failed <<" case"<< (stats.cases_failed>1 ? "s":"") <<" FAILED!!! <<<---"
+					<< " ("
+					<<	std::fixed << std::setprecision(1)
+					<<	(float(stats.cases_failed)/float(stats.cases_run)   * 100) <<"% of "<< stats.cases_run <<" run, "
+					<<	(float(stats.cases_failed)/float(stats.cases_total) * 100) <<"% of all"
+					<<	std::defaultfloat
+					<< ")"
+					<< "\n\n"
+				;
+			}
 		}
 		std::cerr << _EQ_____NL;
 	}
@@ -279,22 +309,40 @@ thread_local TestStats::Stats TestStats::global_stats{};
 
 //----------------------------------------------------------------------------
 template <typename Signature>
-struct Test : TestStats
+class Test : protected TestStats
 // Run-once, throw-away test runner
+//----------------------------------------------------------------------------
 {
 	// Config:
-	std::function<Signature> f; // Copy semantics for now, to allow replacing!
 	std::string batch_name;
+	std::function<Signature> f; // Copy semantics for now, to allow replacing!
 	TestFlags flags;
 
+	// State:
 	bool reported = false;
 
+public:
 	//--------------------------------------------------------------------
 	template<typename Fn>
-	Test(Fn&& f, std::string_view name = "", TestFlags flags = Test_Defaults)
-        	: f(std::forward<Fn>(f))
-		, batch_name(name.empty() ? __func__ : name)
-		, flags(flags)
+	Test(Fn&& f, TestFlags flags = Test_Defaults,
+		std::source_location src_loc = std::source_location::current())
+		: Test(src_loc, "", std::forward<Fn>(f), flags) {}
+
+	template<typename Fn>
+	Test(std::string_view name, Fn&& f, TestFlags flags = Test_Defaults,
+		std::source_location src_loc = std::source_location::current())
+		: Test(src_loc, name, std::forward<Fn>(f), flags) {}
+
+//! Internal common path:
+	template<typename Fn>
+	Test(std::source_location src_loc, std::string_view name, Fn&& f, TestFlags flags)
+	        : batch_name(name.empty()
+			? std::string(src_loc.file_name())
+				+ ", line " + std::to_string(src_loc.line())
+				+ ": " + std::string(src_loc.function_name())
+			: name)
+	        , f(std::forward<Fn>(f))
+	        , flags(flags)
 	{
 		show_header();
 	}
@@ -307,16 +355,17 @@ struct Test : TestStats
 			&& !reported) report();
 	}
 
-	/*!! Since the callable type (of f) is frozen at comp. time, this is pretty much pointless:
+	// Since the callable type (Fn) is frozen at comp. time, this is pretty limited,
+	// but there could still be use cases for this (e.g. comparative tests against
+	// different versions/implementations of the same function etc.)
 	template<typename Fn>
 		requires std::convertible_to<Fn, std::function<Signature>>	
 	auto& set(Fn&& f)
 	{
         	this->f = std::forward<Fn>(f);
-		std::cerr << "---- The test-subject callable has been replaced. ----\n";
+		//std::cerr << "---- The test-subject callable has been replaced. ----\n";
 		return *this;
 	}
-	!!*/
 
 	//--------------------------------------------------------------------
 	template <class Input, class ExpectedT>
@@ -389,7 +438,7 @@ struct Test : TestStats
 	//!! Or: ignore(), just to distinguish more from "implicitly skipped"?...
 	//!! But then there would be hopeless ambiguity whether "ignored" is also "skipped"... :)
 	template <class Input, typename ExpectedT>
-	auto& skip(const Input& input, const ExpectedT& expected, std::string_view reason = "")
+	auto& skip(const Input&, const ExpectedT&, std::string_view reason = "")
 	{
 		__prepare_tc_run(false, reason);
 		return *this;
@@ -408,10 +457,25 @@ struct Test : TestStats
 	}
 
 	//--------------------------------------------------------------------
-	auto& report(bool silence_the_dtor = true, Stats* alt_stats = nullptr)
+	auto& sep(std::string_view text = "")
+	{
+		std::cerr
+			<< (text.empty() ? _SEP____NL : text)
+		;
+		return *this;
+	}
+
+	//--------------------------------------------------------------------
+	auto& report(bool silence_the_dtor = true)
 	{
 		TestStats::report(this->stats);
 		if (silence_the_dtor) reported = true;
+		return *this;
+	}
+
+	auto& reset()
+	{
+		stats = Stats{};
 		return *this;
 	}
 
@@ -456,18 +520,150 @@ protected:
 
 }; // class Test
 
-// --- Deduction guides for deducing Test<Signature> from a ctor call:
-// - #1: For lambdas and other callables (functors)
+// --- Deduction guides for deducing Test<Signature> from a ctor call...
+// - #1: For lambdas and other callables (functors):
 template<typename Fn>
-Test(Fn&& func, std::string_view name = "", TestFlags flags = Test_Defaults)
+Test(std::string_view name, Fn&& func, TestFlags flags = Test_Defaults)
 	-> Test<typename function_traits<decltype(&std::decay_t<Fn>::operator())>::signature>;
 
-// - #2: For fn. pointers we can just use the callable type as-is:
+// - #2: Untitled test:
+template<typename Fn>
+Test(Fn&& func, TestFlags flags = Test_Defaults)
+	-> Test<typename function_traits<decltype(&std::decay_t<Fn>::operator())>::signature>;
+
+// - #3: For a fn. pointer we can just use its callable type as-is:
 template<typename R, typename... Args>
-Test(R(*)(Args...), std::string_view name = "", TestFlags flags = Test_Defaults)
+Test(std::string_view name, R(*)(Args...), TestFlags flags = Test_Defaults)
+	-> Test<R(Args...)>;
+
+// - #4: Untitled, with fn. ptr.:
+template<typename R, typename... Args>
+Test(R(*)(Args...), TestFlags flags = Test_Defaults)
 	-> Test<R(Args...)>;
 
 
 } // namespace sz::test
+
+
+#ifdef UNIT_TEST
+//============================================================================
+// g++ -std=c++20 -g -gdwarf-4 -gstrict-dwarf -fsanitize=undefined -fsanitize-trap -Wall -Wextra -pedantic -DUNIT_TEST -x c++ runner.hh
+// cl -std:c++20 -EHsc -Zi -fsanitize=address -W4 -DUNIT_TEST -TP runner.hh
+
+using namespace sz::test;
+using std::cout, std::cerr, std::string_view, std::string; using namespace std::literals;
+
+int main()
+{
+	TestStats::report();
+
+	Test([]{});
+
+	//!! Void test subjects can't be run currently!...
+	//!!Test([]{}).run(In{}, ...);
+	//!!Test([]{}).run(In{}, Expect{});
+
+	Test("Skip void test subject",
+		[]{}).skip(In{}, Expect{});
+
+	//!! This doesn't work either:
+	//!! Test("Skip void test subject, with no Expect{}", []{}).skip(In{}, {});
+	//!! Test("Skip void test subject, with no Expect{}", []{}).skip(In{}, (void)0);
+
+	TestStats::report();
+
+	Test([]{ return true; }).run(In{}, true);
+
+	Test(	"This test should fail!",
+		[]{ return true; }).run(In{}, false);
+
+	Test([](){ cout << "hello\n"; return true; })
+		.run(In{}, true)
+		.sep()
+		.sep("The next case should fail:")
+		.run(In{}, false) // Fail!
+		.sep()
+	;
+
+	TestStats::report();
+
+	cerr << "\nAfter TestStats::reset()...:"; // <- The cumulative report starts with a newline...
+	TestStats::reset();
+	TestStats::report();
+
+
+	Test("ALL SKIP", []{ return false; })
+		.skip(In{}, true)
+		.skip(In{}, false)
+		.skip(In{}, true)
+		.skip(In{}, false)
+	;
+
+
+	auto f1 = [](const char* in) { cout << in << ": f1"; return true; };
+	auto f2 = [](const char* in) { cout << in << ": f2"; return false; };
+	Test("Replacing the test callable (lamdas should be replaceable, too!)", f1)
+		.run( In{"Running original"}, Expect{ true } )
+		.set(f2)
+		.run( In{"Running replacement"}, Expect{ false } )
+		.sep("Now setting a compatible lambda...\n")
+		.set([](string_view x) { cout << ">>> "<< x <<" <<<"; return false; })
+		.run( In{"Running something else..."}, Expect{ false } )
+	;
+
+	//
+	// More reporting...
+	//
+	{
+		auto report_test = Test("Auto reporting DISALED by manual reporting", []{return true;});
+		report_test.run(In{}, true);
+		report_test.run(In{}, true);
+	//!!	report_test.report(false); // false: don't disable the dtor's (duplicate!) auto reporting
+		report_test.report();
+		report_test.sep("The dtor will NOT also auto-report now; this failed case should appear in no summary:\n");
+		report_test.run(In{}, false);
+	}
+
+	Test("INTERMEDIATE BY-REQUEST reporting; no auto report at destruction", []{return true;})
+		.run(In{}, true)
+		.run(In{}, true)
+		.run(In{}, true)
+		.sep("Early interim results... - DISABLES auto-reporting!\n")
+		.report() // Only by-req reporting in this instance from now on!
+
+		.sep("Cumulative by-req. report follows after this section...\n")
+		.run(In{}, true)
+		.skip(In{}, true)
+		.run(In{}, false)
+		.report()
+
+		.sep("This section will have fresh stats, due to .reset()...\n")
+		.reset()
+		.run(In{}, true)
+		.run(In{}, false)
+		.report()
+
+		.sep("The following skipped cases will NOT be reported in a summary:\n")
+		.skip(In{}, true).skip(In{}, true).skip(In{}, true)
+		.sep("\n...except in a manually called global report:\n")
+	;
+	TestStats::report();
+
+
+	{	auto report_test_1 = Test("CONTROLLED auto reporting #1 - VERY MESSY THOUGH!", []{return true;});
+		report_test_1.run(In{}, true);
+		report_test_1.run(In{}, false);
+
+	  {	auto report_test_2 = Test("CONTROLLED auto reporting #2 - VERY MESSY THOUGH!", []{return true;});
+		report_test_2.skip(In{}, true);
+		report_test_2.skip(In{}, false);
+	  } // Reporting #2 here first...
+
+		cerr << "\n\tSome random output between the two test stat. reports...\n\n";
+
+	}   // ...then #1 here.
+
+} // main
+#endif // UNIT_TEST
 
 #endif // _SZXCVBN3807R5YT68FNUGVHM678_
