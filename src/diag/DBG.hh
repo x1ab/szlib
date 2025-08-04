@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 // My old, "meh, good enough" C++ debug helper macros
-// 2.3.7 (Public Domain; github.com/xparq/DBG.hh)
+// 2.3.8 (Public Domain; github.com/xparq/DBG.hh)
 //----------------------------------------------------------------------------
 //
 // CONTROL SYMBOLS:
@@ -315,6 +315,12 @@ namespace {
 namespace std { class ios_base; } // Just to accept & ignore them!
 namespace sz
 {
+
+#ifdef _MSC_VER // Disable the MS-only nag warning for fopen(): "warning C4996: 'fopen': This function or variable may be unsafe..."
+#  pragma warning(push)
+#  pragma warning(disable: 4996) // 'fopen': This function may be unsafe.
+#endif
+
 //////////////////////////////////
 class File
 {
@@ -339,6 +345,10 @@ public:
 #endif
 		return f_; }
 };
+
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 
 //////////////////////////////////
 class Stream : public File
