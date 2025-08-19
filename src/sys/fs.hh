@@ -1,4 +1,4 @@
-// v0.2.0
+// v0.2.1
 
 #ifndef _LSF39847G45796GK890G676G42GF35_
 #define _LSF39847G45796GK890G676G42GF35_
@@ -24,7 +24,7 @@ inline std::string dirname(std::string_view path)
 
 inline std::string basename(std::string_view path, bool keep_last_suffix = true)
 {
-	return keep_last_suffix ? 
+	return keep_last_suffix ?
 		std::filesystem::path(path).filename().string() :
 		std::filesystem::path(path).stem().string();
 }

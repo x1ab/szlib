@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
-// My old, "meh, good enough" C++ debug helper macros
-// 2.3.8 (Public Domain; github.com/xparq/DBG.hh)
+// My 20-year-old "good enough" C++ debug helper macros (partly facelifted)
+// 2.4.0 (Public Domain; github.com/xparq/DBG.hh)
 //----------------------------------------------------------------------------
 //
 // CONTROL SYMBOLS:
@@ -108,35 +108,41 @@ namespace {
 	template<typename T> _NoDbg_Sink_ constexpr operator ,  (_NoDbg_Sink_&&, [[maybe_unused]] T&& x) { return _NoDbg_Sink_(); }
 }
 
-#define DBG_ENABLE
-#define DBG_DISABLE
+// These still don't need a semicolon (even after #43):
 
-#define DBGASSERT(...)    _NoDbg_Sink_::NOOP();
-#define DBGASSERT_IF(...) _NoDbg_Sink_::NOOP();
+#define DBG_ENABLE        ((void)0);
+#define DBG_DISABLE       ((void)0);
+#define DBGTRACE_QUIET    ((void)0);
+#define DBGTRACE_LOUD     ((void)0);
 
-#define DBGTHROW(msg)     _NoDbg_Sink_::NOOP();
+#define _
+
+// The rest do:
+
+#define DBGTRACE          ((void)0)
+#define DBGMARK           ((void)0)
+#define DBGBEEP           ((void)0)
+
+//!!?? Why are these not just void 0s too? The above don't seem to trigger "expression has no effect" warnings!
+#define DBGASSERT(...)    _NoDbg_Sink_::NOOP()
+#define DBGASSERT_IF(...) _NoDbg_Sink_::NOOP()
+
+#define DBGTHROW(msg)     _NoDbg_Sink_::NOOP()
 #define DBG_throw(x)      throw x
-#define DBGABORT          _NoDbg_Sink_::NOOP();
+#define DBGABORT          _NoDbg_Sink_::NOOP()
 
 #define DBGRAW            _NoDbg_Sink_{}<<
 #define DBG               _NoDbg_Sink_{}<<
 #define DBGDUMP           _NoDbg_Sink_{}<<
 #define DBGBOX            _NoDbg_Sink_{}<<
-#define DBG_(x)           _NoDbg_Sink_::NOOP();
-
-#define DBGTRACE
-#define _
-#define DBGTRACE_QUIET    _NoDbg_Sink_::NOOP();
-#define DBGTRACE_LOUD     _NoDbg_Sink_::NOOP();
-#define DBGMARK
-#define DBGBEEP
+#define DBG_(x)           _NoDbg_Sink_::NOOP()
 
 #define DBGLOG            _NoDbg_Sink_{}<<
-#define DBGLOG_(x)        _NoDbg_Sink_::NOOP();
+#define DBGLOG_(x)        _NoDbg_Sink_::NOOP()
 #define DBGLOGX(f)        _NoDbg_Sink_{}<<
 #define DBGLOGX_(...)     _NoDbg_Sink_{}<<
-#define DBGLOG_OPEN(x)	  _NoDbg_Sink_::NOOP();
-#define DBGLOG_CLOSE(x)	  _NoDbg_Sink_::NOOP();
+//#define DBGLOG_OPEN(x)	  _NoDbg_Sink_::NOOP()
+//#define DBGLOG_CLOSE(x)	  _NoDbg_Sink_::NOOP()
 
 // ==========================================================================
 //
@@ -253,24 +259,24 @@ namespace {
 #  define DBGTRACE_QUIET { Dbg::Tracer::instance().off(); }
 #  define DBGTRACE_LOUD  { Dbg::Tracer::instance().on(); }
 #else
-#  define DBGTRACE
-#  define DBGTRACE_QUIET {0;}
-#  define DBGTRACE_LOUD  {0;}
+#  define DBGTRACE       ((void)0)
+#  define DBGTRACE_QUIET ((void)0)
+#  define DBGTRACE_LOUD  ((void)0)
 #endif
 
 // For convenience:
-#define _ DBGTRACE
+#define _ DBGTRACE;
 
 
 #define DBGTHROW(msg) \
-	{ Dbg::Out::throwtrace(#msg, __func__, __FILE__, __LINE__);	\
+	do { Dbg::Out::throwtrace(#msg, __func__, __FILE__, __LINE__);	\
 	  Dbg::Tracer::trigger_stack_dump();	\
-	  throw std::exception(msg); }
+	  throw std::exception(msg); } while(0)
 
 #define DBG_throw(x) \
-	{ Dbg::Out::throwtrace(x, #x, __func__, __FILE__, __LINE__);	\
+	do { Dbg::Out::throwtrace(x, #x, __func__, __FILE__, __LINE__);	\
 	  Dbg::Tracer::trigger_stack_dump();	\
-	  throw x; }
+	  throw x; } while(0)
 
 #define DBGASSERT(x) \
 	Dbg::Asserter(__FILE__, __LINE__, __func__).verify((x) != 0, "CONDITION: \"" #x "\"")
@@ -278,9 +284,9 @@ namespace {
 #define DBGASSERT_IF(implication) DBGASSERT(implication : true)
 
 #define DBGABORT \
-	{ DBGRAW "*** ABORTING... (at ", __func__, ": ", __LINE__, ", ", __FILE__, ")"; \
+	do { DBGRAW "*** ABORTING... (at ", __func__, ": ", __LINE__, ", ", __FILE__, ")"; \
 	  Dbg::Tracer::instance().dump_call_stack(); /* Note: trigger_stack_dump is not enough for abort()! */	\
-	  std::abort(); }
+	  std::abort(); } while(0)
 
 #define DBGRAW  Dbg::Out::raw_line() <<
 #define DBG     Dbg::Out::dumper_line(__func__, 0) <<
@@ -288,14 +294,14 @@ namespace {
 
 #define DBGBOX  Dbg::Out::raw_line(Dbg::Out::FlushDbgLine(Dbg::Out::databuf(), Dbg::Out::POPUP_MESSAGE, Dbg::Out::dataout())) <<
 
-#define DBG_(x) Dbg::Out::dumpval(#x, x);
+#define DBG_(x) Dbg::Out::dumpval(#x, x)
 
 #define DBGMARK { DBGRAW "--> " << __func__ << " (" << __FILE__ << ", " << __LINE__ << ")"; }
 
 #ifdef DBG_HAS_WIN32__
-#define DBGBEEP { MessageBeep((UINT)-1); } // Not ::MessageBeep; see #18!
+#define DBGBEEP MessageBeep((UINT)-1) // Not ::MessageBeep; see #18!
 #else
-#define DBGBEEP { DBG_CFG_TRACESTREAM << '\a'; } // Even more of a hit and miss, though...
+#define DBGBEEP (DBG_CFG_TRACESTREAM << '\a') // Even more of a hit and miss, though...
 #endif
 
 //===========================================================================
