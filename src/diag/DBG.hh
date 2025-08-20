@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
-// My 20-year-old "good enough" C++ debug helper macros (partly facelifted)
-// 2.4.0 (Public Domain; github.com/xparq/DBG.hh)
+// My 20-year-old "good enough" C++ debug helper macros, being facelifted
+// 2.5.0 (Public Domain; github.com/xparq/DBG.hh)
 //----------------------------------------------------------------------------
 //
 // CONTROL SYMBOLS:
@@ -163,9 +163,9 @@ namespace {
 
 //!! I wish this switching could be done at a better place!
 #ifdef DBG_CFG_REPLACE_IOSTREAM
-#  define _DBG_IONS sz
+#  define _DBG_IO_NS sz
 #else
-#  define _DBG_IONS std
+#  define _DBG_IO_NS std
 #endif
 
 // Generic helpers
@@ -176,13 +176,19 @@ namespace {
 #define DBG_HAS_WIN32__
 #endif
 
-#if defined(DBG_HAS_WIN32__) && !defined(WINAPI) //&& defined (_MSC_VER)
-#  ifndef _WINDOWS_ //!!?? Is this the canonical flag for including it (or _INC_WINDOWS)?
-#    ifndef _MSC_VER
+
+//
+// On Windows use specific bits of the Win32 API without including Windows.h...
+// (Because including it notoriously broke GCC-15's import std "efforts".)
+//
+#if defined(DBG_HAS_WIN32__) //&& defined (_MSC_VER)
+#  ifndef _WINDOWS_
+/*!! OLD:
+//#    ifndef _MSC_VER
 //#      warning "Windows.h was not included, doing it with WIN32_LEAN_AND_MEAN, NOMINMAX, VC_EXTRALEAN... (Better to do it beforehand, to keep full control over how and when exactly it's done!)"
-#    else
+//#    else
 //#      pragma message("Windows.h was not included, doing it with WIN32_LEAN_AND_MEAN, NOMINMAX, VC_EXTRALEAN... (Better to do it beforehand, to keep full control over how and when exactly it's done!)")
-#    endif
+//#    endif
 #    undef  WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
 #    undef  VC_EXTRALEAN
@@ -190,23 +196,99 @@ namespace {
 #    undef  NOMINMAX
 #    define NOMINMAX
 #    include <windows.h>
-#    ifdef _MSC_VER
-#      pragma comment(lib, "user32")  // help with using the Win32-specific features
-       //!! But... this is only for MSVC! How to "autolink" with GCC and CLANG?! -> #5!
-#    endif
-#  endif
+!!*/
+	extern "C" {
+		struct HWND__;
+		typedef struct HWND__* HWND;
+
+		void __declspec(dllimport) __stdcall
+		OutputDebugStringA(const char*);
+		void __declspec(dllimport) __stdcall
+		OutputDebugStringW(const wchar_t*);
+
+		int __declspec(dllimport) __stdcall
+		MessageBoxA(HWND hWnd, const char* Text, const char* Caption, unsigned Type);
+		int __declspec(dllimport) __stdcall
+		MessageBoxW(HWND hWnd, const wchar_t* Text, const wchar_t* Caption, unsigned Type);
+
+		int __declspec(dllimport) __stdcall
+		MessageBeep(unsigned);
+	}
+
+#	ifdef _MSC_VER
+#		pragma comment(lib, "kernel32") // OutputDebugString
+#		pragma comment(lib, "user32")   // MessageBox, MessageBeep
+		//!! But... this is only for MSVC! No "autolink" with GCC/CLANG, AFAIK... -> #5
+#	endif
+#  endif // _WINDOWS_
+
+	namespace Dbg::Win32 {
+
+		// For MBox (but also useble with MessageBox, and even MessageBeep):
+		enum MBIcon : unsigned {
+			Error       = 0x00000010,
+			Stop        = Error,
+			Hand        = Error,
+			Question    = 0x00000020, // Question mark (deprecated)
+			Warning     = 0x00000030,
+			Exclamation = Warning,
+			Information = 0x00000040,
+			Asterisk    = Information,
+		};
+
+		// For Mbox (or MessageBox) only:
+		enum MBFlag : unsigned {
+			OKCancel    = 0x00000001,
+			YesNo       = 0x00000004,
+			YesNoCancel = 0x00000003,
+			TaskModal   = 0x00002000,
+			Foreground  = 0x00010000,
+			Topmost     = 0x00040000,
+		};
+
+		//---------------------------------------------------------------------
+		// Note:
+		// - Can't use the original uniform names of these, as they may be macros
+		//   that are already defined (if Windows.h has already been included)!...
+		// - Also, we can completely ignore the UNICODE switching, too, by just
+		//   letting C++ overloading do the same, but automatically.
+		//---------------------------------------------------------------------
+		// OutputDebugString:
+		inline void DbgOut(const char*    str) { OutputDebugStringA(str); }
+		inline void DbgOut(const wchar_t* str) { OutputDebugStringW(str); }
+		// MessageBox:
+		inline int MBox(HWND hWnd, const char*    Text, const char*    Caption, unsigned Flags)
+			{ return MessageBoxA(hWnd, Text, Caption, Flags); }
+		inline int MBox(HWND hWnd, const wchar_t* Text, const wchar_t* Caption, unsigned Flags)
+			{ return MessageBoxW(hWnd, Text, Caption, Flags); }
+	} // Dbg::Win32
+
 #endif
 
+//!! NO LONGER NEEDED, as we don't include windows.h any more (#3):
+//!! GCC 15 fails on import std if windows.h has already been included...:
+#if defined(IMPORT_STD) //!! && !defined(_WINDOWS_)
+# define _DBG_DO_IMPORT_STD
+#endif
+
+
+#ifdef _DBG_DO_IMPORT_STD
+	#include <cstdio>  // FILE... (Yes; seems to be still required, and also before the import.)
+	import std;
+#else
 // #include <iostream> -> See later, at #if... DBG_CFG_REPLACE_IOSTREAM!
-#include <sstream>
-#include <fstream>
-#include <stdexcept> // uncaught_exception
-#include <vector>    // for trace paths & supporting 'DBGDUMP vector'
-#include <string>    // for trace paths & supporting 'DBGDUMP string'
-#include <string_view>
-#include <cstdio>    // sprintf
-#include <mutex>
-#include <type_traits>
+#	include <sstream>
+#	include <fstream>
+#	include <stdexcept> // uncaught_exception
+#	include <vector>    // for trace paths & supporting 'DBGDUMP vector'
+#	include <string>    // for trace paths & supporting 'DBGDUMP string'
+#	include <string_view>
+#	include <cstdlib>   // exit
+#	include <cstdio>    // sprintf
+#	include <cstdint>   // uint32_t
+#	include <mutex>
+#	include <type_traits>
+#endif
 
 #ifndef DBG_CFG_STREAMPREFIX
 #define DBG_CFG_STREAMPREFIX  "DBG> "
@@ -240,7 +322,7 @@ namespace {
 #endif
 
 #ifndef DBG_CFG_OUTSTREAM
-#define DBG_CFG_OUTSTREAM     _DBG_IONS::cerr
+#define DBG_CFG_OUTSTREAM     _DBG_IO_NS::cerr
 #endif
 
 #ifndef DBG_CFG_TRACESTREAM
@@ -299,7 +381,7 @@ namespace {
 #define DBGMARK { DBGRAW "--> " << __func__ << " (" << __FILE__ << ", " << __LINE__ << ")"; }
 
 #ifdef DBG_HAS_WIN32__
-#define DBGBEEP MessageBeep((UINT)-1) // Not ::MessageBeep; see #18!
+#define DBGBEEP MessageBeep((unsigned)-1) // Not ::MessageBeep; see #18!
 #else
 #define DBGBEEP (DBG_CFG_TRACESTREAM << '\a') // Even more of a hit and miss, though...
 #endif
@@ -311,14 +393,24 @@ namespace {
 //!! Alas, StringStream still uses <string>, which will probably end up including everything anyway...:
 
 #if __has_include("sz/streams.hh")
-# include "sz/streams.hh"
+# ifndef IMPORT_STD //!! No `import std` support there yet:
+#   include "sz/streams.hh"
+# endif
 #else
 
-#include <string>
-#include <utility> // forward, decay
-#include <concepts>
-#include <type_traits>
-namespace std { class ios_base; } // Just to accept & ignore them!
+#ifdef _DBG_DO_IMPORT_STD
+// Already done:	import std;
+// Already done:	#include <cstdio>
+#else
+#	include <string>
+#	include <utility> // forward, decay
+#	include <concepts>
+#	include <type_traits>
+#	ifndef __clang__ // "Ambiguous" error with clang...
+		namespace std { class ios_base; } // Just to accept & ignore them!
+#	endif
+#endif
+
 namespace sz
 {
 
@@ -498,7 +590,7 @@ template <class StreamT, typename = void*>
 struct Noop : public SetFlags<StreamT> {};
 
 
-	template <class StreamT, class ScopedManip = sz::Noop<StreamT>>
+	template <class StreamT, class ScopedManip = sz::Noop<StreamT>> //!! #54
 	struct StreamRef {
 		StreamT& s_;
 		ScopedManip scoped_state_;
@@ -582,8 +674,12 @@ namespace sz {
 
 #else // DBG_CFG_REPLACE_IOSTREAM
 
-# include <iostream>
-# include <iomanip>
+  #ifdef _DBG_DO_IMPORT_STD
+  // Already done:	import std;
+  #else
+  #	include <iostream>
+  #	include <iomanip>
+  #endif
   using DBG_OSTREAM_TYPE = decltype(std::cerr);
   using DBG_SSTREAM_TYPE = std::stringstream;
 
@@ -834,8 +930,13 @@ template<> inline Out& operator << (Out& d, const char* x)
 	  return d; }
 
 template<> inline Out& operator << (Out& d, char x)
-	{ using ::sz::operator<<;
+	{
+#ifdef DBG_CFG_REPLACE_IOSTREAM
+	  using ::sz::operator<<; //!! #56
 	  Out::databuf() << '\'' << x << '\'' <<" ("<< int(x) <<", "<<sz::Hex()<< int(x) <<")";
+#else
+	  Out::databuf() << '\'' << x << '\'' <<" ("<< int(x) <<", "<<std::hex<< int(x) <<")";
+#endif
 	  return d; }
 
 template<> inline Out& operator << (Out& d, std::string x)      { Out::databuf() << '\"' << x << "\"s";  return d; }
@@ -972,8 +1073,7 @@ inline void Out::FlushLine::flush()
 		cooked_line += DBG_CFG_MSGBOXPREFIX;
 		#endif
 		cooked_line += linebuf_.str();
-		MessageBox(0, cooked_line.c_str(), "DEBUG MESSAGE",
-				MB_ICONASTERISK & MB_ICONINFORMATION); // Not ::MessageBox; see #18!
+		Win32::MBox(0, cooked_line.c_str(), "DEBUG MESSAGE", Win32::MBIcon::Information);
 		break;
 		#endif
 		; // Fall back to a debug console if no popup support...
@@ -984,7 +1084,7 @@ inline void Out::FlushLine::flush()
 		cooked_line += DBG_CFG_DBGCONPREFIX;
 		#endif
 		cooked_line += linebuf_.str();
-		OutputDebugString(cooked_line.c_str()); // Not ::OutputDebugString; see #18!
+		Win32::DbgOut(cooked_line.c_str());
 		break;
 		#endif
 		; // Fall back to std. stream output if not supported...
@@ -1048,7 +1148,7 @@ inline void Tracer::dbg_terminate_handler()
 //	} else {
 		Tracer::instance().dump_call_stack();
 		DBGRAW "*** TERMINATING...";
-		exit(-1);
+		std::exit(-1);
 //	}
 }
 
