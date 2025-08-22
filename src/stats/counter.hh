@@ -6,7 +6,7 @@
 //#include <ostream> // The conv. ops. should be enough!
 #include <cassert>
 
-namespace sz {
+namespace sz::stats {
 
 //--------------------------------------------------------------------------------------
 template <typename CountType = unsigned>
@@ -92,7 +92,7 @@ public:
 	std::function<void(Self&)> on_overflow = [](Self&){}; // Another version could just throw instread...
 };
 
-} // namespace
+} // namespace sz::stats
 
 
 //============================================================================
@@ -101,7 +101,7 @@ public:
 #include <cstdint>
 #include <iostream>
 
-using namespace sz;
+using namespace sz::stats;
 using namespace std;
 
 int main()
@@ -161,7 +161,7 @@ int main()
 
 	cerr << "\n\nAssign: funcall-op(7)\n\t";
 		cerr << cc(7) << "\n";
-}
+} // main
 
 #endif // UNIT_TEST
 #endif // _H7G5689FJ42578DT7D245JT88745N45687_

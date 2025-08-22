@@ -1,9 +1,9 @@
-#ifndef _SZ_ROLLING_AVG_HH_
-#define _SZ_ROLLING_AVG_HH_
+#ifndef _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_
+#define _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_
 
-namespace sz {
+namespace sz::stats {
 
-template<int MAX_SAMPLES, typename TFloat = float>
+template<int MAX_SAMPLES = 60, typename TFloat = float>
 struct RollingAverage
 {
 	TFloat samples[MAX_SAMPLES] = {};
@@ -47,5 +47,6 @@ struct SmoothRollingAverage
 #undef TFloat
 #endif
 
-}; // namespace
-#endif _SZ_ROLLING_AVG_HH_
+}; // namespace sz::stats
+
+#endif // _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_

@@ -28,6 +28,6 @@ namespace sz::stats {
 		auto average() const { return total / samples; }
 	};
 
-} // nemaspace sz::stats
+} // namespace sz::stats
 
 #endif // _XMDC780935NYX87457TYBNV27Y4X7C6_
