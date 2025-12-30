@@ -1,15 +1,26 @@
-// v0.2.1
+// v0.3.1
 
-#ifndef _LSF39847G45796GK890G676G42GF35_
-#define _LSF39847G45796GK890G676G42GF35_
+#ifndef _SZLSF39847G45796GK890G676G42GF35_
+#define _SZLSF39847G45796GK890G676G42GF35_
 
 #include <filesystem>
 #include <string>
 #include <string_view>
-#include <cassert>
+#include <assert.h>
 
 namespace sz::fs {
 
+
+#ifdef _WIN32
+#	define _fs_WINDOWS_AND_BACKSLASH_(ch) ((ch) == '\\')
+//#	define _fs_P_SEP_ '\\'
+#else
+#	define _fs_WINDOWS_AND_BACKSLASH_(ch) (false)
+//#	define _fs_P_SEP_ '/'
+#endif
+#define _fs_IS_PATH_SEP_(ch) (ch == '/' || _fs_WINDOWS_AND_BACKSLASH_(ch))
+
+//----------------------------------------------------------------------------
 inline std::string getcwd()
 {
 	std::error_code ec;
@@ -17,11 +28,13 @@ inline std::string getcwd()
 	return ec ? "" : cwd.string();
 }
 
+//----------------------------------------------------------------------------
 inline std::string dirname(std::string_view path)
 {
 	return std::filesystem::path(path).parent_path().string();
 }
 
+//----------------------------------------------------------------------------
 inline std::string basename(std::string_view path, bool keep_last_suffix = true)
 {
 	return keep_last_suffix ?
@@ -29,7 +42,10 @@ inline std::string basename(std::string_view path, bool keep_last_suffix = true)
 		std::filesystem::path(path).stem().string();
 }
 
-// This one updates the input in-place
+//----------------------------------------------------------------------------
+//!!C++: These two only compile in this order, not if reversed!...
+//----------------------------------------------------------------------------
+// This one updates the input in-place:
 inline std::string& endslash_fixup(std::string* dirpath)
 {
 	assert(dirpath);
@@ -38,7 +54,7 @@ inline std::string& endslash_fixup(std::string* dirpath)
 	       result += '/';
 	return result;
 }
-
+// This one copies:
 inline std::string endslash_fixup(std::string_view dirpath)
 {
 	std::string result(dirpath);
@@ -46,21 +62,13 @@ inline std::string endslash_fixup(std::string_view dirpath)
 	return result;
 }
 
-#ifdef _WIN32
-#  define BACKSLASH_ON_WINDOWS(char) ((char) == '\\')
-//#  define _P_SEP_ '\\'
-#else
-#  define BACKSLASH_ON_WINDOWS(char) (false)
-//#  define _P_SEP_ '/'
-#endif
+//----------------------------------------------------------------------------
 inline bool is_absolute(std::string_view path)
 {
 #ifdef _WIN32 //!! This should be configurable: there are /-rooted path-resolving envs. also on Windows!
 
-	return
-		path.length() >= 3 && (path[1] == ':') //!!?? What are the edge cases (apart from CON: and
-		&&                                     //!!?? LPT1: etc. that are not supported here anyway)?
-		(path[2] == '/' || BACKSLASH_ON_WINDOWS(path[2]))
+	return path.length() >= 3 && (path[1] == ':') //!!?? What are the edge cases (apart from CON: and
+	          && _fs_IS_PATH_SEP_(path[2])        //!!?? LPT1: etc. that are not supported here anyway)?
 	;
 
 #else // Assuming Unix-like (!!incorrectly!!)...
@@ -70,49 +78,49 @@ inline bool is_absolute(std::string_view path)
 #endif
 }
 
-namespace internal {
+	//--------------------------------------------------------------------
+	namespace internal {
 
-	inline bool syntactically_unprefixable(std::string_view path)
-	// Windows: `c:...`, and `~` on non-Win (assuming UNIX — incorrectly though!)
-	// Note: `//...` and `\\...` are technically prefixable: they'd yield a valid path.
-	{
-#ifdef _WIN32 //!! This should be configurable: there are /-rooted path-resolving envs. also on Windows!
+		inline bool syntactically_unprefixable(std::string_view path)
+		// Windows: `c:...`, and `~` on non-Win (assuming UNIX — incorrectly though!)
+		// Note: `//...` and `\\...` are technically prefixable: they'd yield a valid path.
+		{
+	#ifdef _WIN32 //!! This should be configurable: there are /-rooted path-resolving envs. also on Windows!
 
-		return
-			path.length() >= 2 && (path[1] == ':') //!!?? What are the edge cases (apart from CON: and
-		;	                                       //!!?? LPT1: etc. which are not supported here anyway)?
-#else
-		// Not really a (raw) path, but a shell symbol, but I see not reason not to support it here:
-		return path.length() > 0 && (path[0] == '~');
-#endif
-	}
+			return
+				path.length() >= 2 && (path[1] == ':') //!!?? What are the edge cases (apart from CON: and
+			;	                                       //!!?? LPT1: etc. which are not supported here anyway)?
+	#else
+			// Not really a (raw) path, but a shell symbol, but I see not reason not to support it here:
+			return path.length() > 0 && (path[0] == '~');
+	#endif
+		}
 
-	inline bool dotted_optout(std::string_view path)
-	// Returns true if `path` explicitly has the form of "./..." (or just ".").
-	// Note: "../xxx" are not special; "./../xxx" could still be used to mark up those, too!
-	{
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wparentheses"
-#endif
-		return
-			path.length() == 1 && (path[0] == '.')
-			||
-			path.length() >= 2 && (path[0] == '.')
-			                   && (path[1] == '/' || BACKSLASH_ON_WINDOWS(path[1]))
-			// Don't normalize the logic above, prefer readability!
-		;
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-	}
+		inline bool dotted_optout(std::string_view path)
+		// Returns true if `path` explicitly has the form of "./..." (or just ".").
+		// Note: "../xxx" are not special; "./../xxx" could still be used to mark up those, too!
+		{
+	#ifdef __GNUC__
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wparentheses"
+	#endif
+			return
+				path.length() == 1 && (path[0] == '.')
+				||
+				path.length() >= 2 && (path[0] == '.') && _fs_IS_PATH_SEP_(path[1])
+				//!! Don't normalize the logic above, prefer readability!
+			;
+	#ifdef __GNUC__
+	#pragma GCC diagnostic pop
+	#endif
+		}
 
-	inline bool slashed_optout(std::string_view path)
-	// Returns true if `path` starts with / (or also \ on Windows).
-	{
-		return path.length() >= 1 && (path[0] == '/' || BACKSLASH_ON_WINDOWS(path[0]));
-	}
-} // internal
+		inline bool slashed_optout(std::string_view path)
+		// Returns true if `path` starts with / (or also \ on Windows).
+		{
+			return path.length() >= 1 && _fs_IS_PATH_SEP_(path[0]);
+		}
+	} // internal
 
 // Path prefixing according to a light "intent protocol" (#17) that encodes
 // in the path itself whether to allow "rebasing" it or not.
@@ -130,19 +138,21 @@ inline std::string prefix_by_intent(std::string_view prefix, std::string_view pa
 	    return string(path);
 	}
 
-	assert(!prefix.empty());
+	assert(!prefix.empty()); // ...for the day I screw up the logic above.
 
-	return path.empty() ? string(prefix) // Just being nice; std::fs::path prefix / "" would return "prefix/"!
+	return path.empty() ? string(prefix) // Just being nice; std::fs::path would return "prefix/" for `"prefix" / ""`.
 	                    : string(prefix)
-	                      + (prefix.back() == '/' || BACKSLASH_ON_WINDOWS(prefix.back())
-	                         ? "" : "/") // Yeah, also flippin' a / to Windows! ;-p
+	                      + (_fs_IS_PATH_SEP_(prefix.back()) ? "" : "/") // (Also flippin' a '/' bird to Windows, if we're at it...)
 	                      + string(path)
 	;
 }
+
+#undef _fs_IS_PATH_SEP_
 #ifdef _WIN32
-#  undef BACKSLASH_TOO_ON_WINDOWS
-//#  undef _W_SEP_
+#	undef _fs_WINDOWS_AND_BACKSLASH__
+//#	undef _fs_P_SEP_
 #endif
+
 
 }; // namespace sz::fs
 
@@ -347,4 +357,4 @@ cerr<<"\n"<< "prefix_by_intent() manual cases to smoke-test each supported type.
 } // main
 #endif // UNIT_TEST
 
-#endif // _LSF39847G45796GK890G676G42GF35_
+#endif // _SZLSF39847G45796GK890G676G42GF35_
