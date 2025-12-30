@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 unset BB_GLOBBING
 #set -x
 
@@ -171,7 +171,13 @@ echo "$list" | while IFS= read -r name; do
 
 	export _TC_CRASHFILE="$TMP_DIR/`basename \"$name\"`.CRASH" # Should be created/deleted by the TC wrapper script
 
-		"$tc_runner" "$name"
+		#! NOTE: the stdin redirect below is CRITICAL for running on WSL!
+		#! One day a test script accidentally launched the Windows version
+		#! of its auto-built executable test artifact (as $case.exe), which
+		#! worked just fine on WSL, but apparenttly broke the stdin buffer
+		#! this loop here has been feeding on, making it terminate abruptly
+		#! after the successful run of the misfiring test case!
+		"$tc_runner" "$name" < /dev/null
 
 	result=$?
 

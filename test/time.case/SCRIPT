@@ -1,0 +1,17 @@
+RUN $CASE
+
+# The time values in the test output are all synthetic, fortunately!... :)
+EXPECT "\
+Tick clock now(): 1
+Tick clock now(): 2
+Tick clock now() after advance(10): 13
+Tick clock is strictly_monotonic (i.e. now always advances) ? true
+Tick clock now() after advance(-10): 4
+Delta ticks: 1
+Delta (of 7, 8) with wrap: 1
+Auto-advance sim clock now: 1.19209e-07
+Auto-advance sim clock now: 2.38419e-07
+Linked clock now(): 4.44089e-16
+Linked clock now(): 8.88178e-16
+ - from source now(): 6.66134e-16
+"

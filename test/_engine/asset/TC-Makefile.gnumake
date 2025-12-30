@@ -1,5 +1,8 @@
-#!!Leftover Windows dependency, clean it up!
+ifeq "$(OS)" "Windows_NT"
 EXE=$(CASE).exe
+else
+EXE=$(CASE)
+endif
 
 # BEWARE: GNUMake doesn't seem to support quoting target names with spaces, so:
 # https://stackoverflow.com/a/10571900/1479945
@@ -24,7 +27,19 @@ _BUILD_DEPS_COMMON=$(TEST_DIR)/$(BUILD_DEPS_COMMON)
 deps=$(_BUILD_DEPS_COMMON) $(src)
 endif
 
+
 # (The "real" $(SHELL) is no good on Windows, even if set!)
-GENERIC_BUILD_CMD=$(_SH_) -c ". build.sh \"$(CASE)\""
+ifeq "$(_SH_)" ""
+_SH_ = sh
+endif
+ifeq "$(_SH_)" "/" #!! Workaround until #90 is fixed!
+_SH_ = sh
+endif
+
+GENERIC_BUILD_CMD=$(_SH_) -c '. build.sh' dummy-1st-arg-will-be-ignored
+
 $(EXE_NAME_W_SPACES_ESCAPED): $(deps)
-	@$(GENERIC_BUILD_CMD)
+	$(GENERIC_BUILD_CMD) "$(CASE)" "$(EXE)"
+#!!NOT:	$(GENERIC_BUILD_CMD) "$(CASE)" "$(EXE_NAME_W_SPACES_ESCAPED)"
+#	echo "PATH=$(PATH)"
+#	echo "GENERIC_BUILD_CMD = $(GENERIC_BUILD_CMD)"

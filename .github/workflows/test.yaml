@@ -1,4 +1,4 @@
-name: test
+name: Regression Tests (not much yet!...)
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
     
     steps:
 
-    - name: Checkout...
+    - name: Repo checkout...
       uses: actions/checkout@v3
 
-    - name: Setup MSVC/CLI dev. env...
+    - name: Setup MSVC/CLI...
       uses: ilammy/msvc-dev-cmd@v1.12.0
 
     - name: Run the tests...
