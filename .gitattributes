@@ -1,16 +1,28 @@
-# So, perhaps "all LF by default" would finally convince it to forget about CRLFs:
-* text=auto eol=lf
-*.case text eol=lf
-SCRIPT text eol=lf
+* -text
 
-# These are kinda redundant now, I think (you can never know; there's no such thing as
-# a dead-sure Git config, especially when it comes to its fkn' cf/lf conversions...)
-#*.sh	text eol=lf
-#*.cfg	text eol=lf
-# The main frontend commands don't have the .sh extension!
-#run	 text eol=lf
-#run_case text eol=lf
+#*.cmd text eol=crlf
+#*Makefile* text eol=lf
+#*.json text eol=lf
+#*.cfg  text eol=lf
 
-# This must come after "run" to override for run.cmd!
-*.cmd text eol=crlf
-*.ps1 text eol=crlf
+#*.md  text=auto
+#*.txt text=auto
+
+*.exe binary
+*.lib binary
+*.a   binary
+*.dll binary
+*.so  binary
+
+*.ttf binary
+*.fnt binary
+
+*.jpg binary
+*.png binary
+*.gif binary
+*.tiff binary
+*.ico binary
+
+*.ogg binary
+*.mp3 binary
+*.wav binary
