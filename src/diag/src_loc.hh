@@ -1,4 +1,4 @@
-﻿/*
+/*
 !! Should take constexpr static config options maybe (e.g. instead of _sz_NO_MSVC_CLEANUP_)?!
 */
 #ifndef _XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH_

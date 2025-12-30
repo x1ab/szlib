@@ -1,4 +1,4 @@
-﻿Replaced plog's own original #include <plog/part> paths anchored to a build-
+Replaced plog's own original #include <plog/part> paths anchored to a build-
 time configured base with the non-bracketed, self-anchored "part" (and with
 "../part" for the ones in subdirs), so that my adapter header can simply
 #include "plog/Log.h", and everything just keeps working, without any build

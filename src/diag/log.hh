@@ -1,4 +1,4 @@
-﻿#ifndef _SDDOSIFUGHODIUGHUC4V509485767N80YTG_
+#ifndef _SDDOSIFUGHODIUGHUC4V509485767N80YTG_
 #define _SDDOSIFUGHODIUGHUC4V509485767N80YTG_
 
 
@@ -83,6 +83,11 @@
 #endif // SZ_LOG_REPLACE_IOSTREAM
 
 #include <string> // snprintf
+
+#ifdef SZ_LOG_DEBUG_ITSELF
+# include <iostream>
+#endif
+
 
 
 //----------------------------------------------------------------------------
@@ -238,6 +243,9 @@ private:
 				initialized = true;
 				__report_after_init(cfg, explicit_init);
 			}
+#ifdef SZ_LOG_DEBUG_ITSELF
+else { std::cerr << "LogMan already initialized (tried level: "<< cfg.filter_level <<")\n"; }
+#endif
 		}
 	private:
 		//--------------------------------------------------------------------
@@ -255,6 +263,9 @@ private:
 				static internal::plog_Szim_FileAppender file_appender(cfg.target.c_str(), cfg.fopen_mode.c_str());
 				appender = &file_appender;
 			}
+#ifdef SZ_LOG_DEBUG_ITSELF
+std::cerr << "LogMan: calling plog::init(filter_level = "<< cfg.filter_level <<")...\n";
+#endif
 			plog::init(static_cast<plog::Severity>(cfg.filter_level), appender);
 		}
 

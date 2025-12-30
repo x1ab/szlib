@@ -1,4 +1,4 @@
-﻿#include "error.hh"
+#include "error.hh"
 
 //!!
 //!! The dependency injection for logging is currently "handled" by expecting the

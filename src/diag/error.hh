@@ -1,5 +1,6 @@
-﻿//============================================================================
-// Error handilng & (user-facing) reporting utilities
+// v0.2.0
+//============================================================================
+// Error handling & (user-facing) reporting utilities
 //
 // (For introspection/debug tools see e.g. log.hh, DBG.hh etc.)
 //============================================================================
@@ -30,6 +31,13 @@
 using namespace std::string_literals;
 //! <sstream> would be nice for << support, but that's almost <iostream>-level heavy.
 //! Maybe integrating plog's nostream instead? (This is a sibling of sz/log anyway!)
+
+// For the CRT IO error reporting helpers:
+#include <cerrno>
+#include <cstring> // strerror[_s](errno)
+
+#include <cassert>
+
 
 // Note:
 //
@@ -131,6 +139,52 @@ using sz::Error;
 using sz::Fatal;
 using sz::Bug;
 using sz::Abort;
+
+
+//----------------------------------------------------------------------------
+// Old-school CRT/errno reporting helpers
+//----------------------------------------------------------------------------
+
+namespace sz {
+
+//----------------------------------------------------------------------------
+//!! MAKE THIS NOT INLINE!...
+inline std::string errno_to_str(int err)
+{
+	if (!err) return {};
+#ifdef _MSC_VER
+	char buf[256] = {};
+	if (strerror_s(buf, sizeof(buf), err) == 0) // strerror_s returns 0 on success
+		return buf;
+	return "Unknown CRT error";
+#else
+	return std::strerror(err);
+#endif
+}
+
+
+//----------------------------------------------------------------------------
+//!! MAKE THIS NOT INLINE!...
+//!! MAKE THIS MORE FLEXIBLE: just return the string — and build that less awkwardly!
+inline int report_file_error(std::string_view fname,
+                             std::string_view default_msg,
+                             std::string_view alt_msg = "<unset>")
+// Also resets errno, returning the value captured on entry.
+{
+	int errno_snapshot = errno; // Just in case something below should somehow also set it...
+	std::string msg = (alt_msg != "<unset>") //! Yeah, not dragging in <optional> for this, thanks. ;-p
+		? std::string(alt_msg)
+		: std::string(default_msg) + " \"" + std::string(fname) + "\"";
+	if (errno_snapshot) {
+		if (msg != "") msg += "\n  - ";
+		msg += "CRT error: \"" + errno_to_str(errno_snapshot) + "\"";
+		errno = 0;
+	}
+	if (msg != "") Error(msg);
+	return errno_snapshot;
+}
+
+} // namespace sz
 
 
 #endif // _CM029874Y687G43YT078GN6RTCF039VM74B5NTYN798_

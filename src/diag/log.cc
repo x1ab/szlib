@@ -1,4 +1,4 @@
-﻿#include "log.hh"
+#include "log.hh"
 
 // For implementing the custom formatterd
 #include <cstdio> // snprintf
