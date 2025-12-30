@@ -1,4 +1,4 @@
-// v0.3.1
+// v0.3.2
 // c++20
 
 #ifndef _SZXCVBN3807R5YT68FNUGVHM678_
@@ -228,9 +228,9 @@ struct TestStats
 
 			if (!stats.cases_failed) {
 				std::cerr
-					<< " ALL OK."
+					<< " OK."
 					<< " ("
-					<<	"Run: " << stats.cases_run
+					<<	"Cases run: " << stats.cases_run
 					<<	(stats.cases_run == stats.cases_total ? "" : " of " + std::to_string(stats.cases_total)
 						+ ", skipped: " + std::to_string(stats.cases_skipped()))
 					<< ")"
@@ -546,7 +546,7 @@ Test(R(*)(Args...), TestFlags flags = Test_Defaults)
 } // namespace sz::test
 
 
-#ifdef UNIT_TEST
+#ifdef UNIT_TEST_TEST // Well, other modules may include this file with UNIT_TEST defined for *them*!
 //============================================================================
 // g++ -std=c++20 -g -gdwarf-4 -gstrict-dwarf -fsanitize=undefined -fsanitize-trap -Wall -Wextra -pedantic -DUNIT_TEST -x c++ runner.hh
 // cl -std:c++20 -EHsc -Zi -fsanitize=address -W4 -DUNIT_TEST -TP runner.hh
@@ -665,6 +665,6 @@ int main()
 	}   // ...then #1 here.
 
 } // main
-#endif // UNIT_TEST
+#endif // UNIT_TEST_TEST
 
 #endif // _SZXCVBN3807R5YT68FNUGVHM678_
