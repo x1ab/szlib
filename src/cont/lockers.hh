@@ -1,4 +1,4 @@
-﻿// 0.1.2
+// 0.1.2
 //#define DEBUG
 /*
 Constant-time "free-list" resource manager/allocator/container

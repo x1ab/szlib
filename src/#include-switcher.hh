@@ -1,4 +1,4 @@
-﻿#ifndef _VV980N7X08T2X0L83Z5867CMV8BN_
+#ifndef _VV980N7X08T2X0L83Z5867CMV8BN_
 #define _VV980N7X08T2X0L83Z5867CMV8BN_
 
 // Works with both the legacy MSVC preproc, and also with /ZC:preprocessor

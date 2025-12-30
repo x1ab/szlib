@@ -1,4 +1,4 @@
-﻿// 0.30.1
+// 0.30.1
 
 /****************************************************************************
   Uniform discrete/continuous time/clock abstraction with polled, chainable
