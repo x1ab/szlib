@@ -46,3 +46,9 @@ tmp/
 *.prev
 .junk/
 *.junk
+
+# Hardcoded test artifacts for Linux...
+test/listvals
+test/semver/semver-sscanf
+test/semver/semver-strstream
+test/time.case/time

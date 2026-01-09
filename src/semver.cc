@@ -104,7 +104,7 @@ SemVer SemVer::parse(const char* s)
 	if (!*s) return SemVer{};
 
 	// Prep. the format string first with the tag buf size...
-	char fmt[100]; snprintf(fmt, sizeof(fmt), "%%u.%%u.%%u%%c%%%u[^ \t\r\n]", SemVer::Tag_Max_Size);
+	char fmt[100]; snprintf(fmt, sizeof(fmt), "%%u.%%u.%%u%%c%%%u[^ \t\r\n]", SemVer::Tag_Max_Size + 1); // +1 for EOS
 
 	// Parse...
 //!!Ref:int n = sscanf(s, "%u.%u.%u%c%127[^ \t\r\n]", &v.major, &v.minor, &v.patch, &tag_sep, v.tag);

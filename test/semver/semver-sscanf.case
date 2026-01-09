@@ -1,0 +1,6 @@
+# Without $TEST_CASE_DIR/... the GH Windows runs failed!
+
+. $TEST_CASE_DIR/param-common.sh
+RUN $CASE "$input"
+. $TEST_CASE_DIR/expected-common.sh
+EXPECT "$result"

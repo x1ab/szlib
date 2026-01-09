@@ -1,6 +1,4 @@
-RUN $CASE 0.22.3-tag
-
-EXPECT "\
+export result="\
 	[0 . 22 . 3 - tag]
 	[10 . 2 . 3]
 	[10 . 2 . 3 - rc-2]

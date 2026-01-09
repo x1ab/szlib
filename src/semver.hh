@@ -1,3 +1,5 @@
+// VERSION: See after the class def.!
+
 #ifndef _MW4MC8907U8V9J7DYFUNHYEUIUM7HCV9ITHY9856HY985CR6MJIHBV_
 #define _MW4MC8907U8V9J7DYFUNHYEUIUM7HCV9ITHY9856HY985CR6MJIHBV_
 
@@ -6,7 +8,7 @@ namespace sz {
 struct SemVer
 {
 	// Plumbing...
-	constexpr static const unsigned Tag_Max_Size = 127; //! NOT including the EOS!
+	constexpr static const unsigned Tag_Max_Size = 100; //! NOT including the EOS!
 	constexpr static bool           is_tag_sep(char c) {
 		return c > ' ' && !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'); // Reject ASCII letters, whitespace, etc.
 		//!!TBD: More restrictive? Could even be just '-' || '_' || '+' || '.' || etc.,
@@ -43,10 +45,10 @@ protected:
 };
 
 
-inline const SemVer SemVer::VERSION = SemVer::parse("0.1.0");
+inline const SemVer SemVer::VERSION = SemVer::parse("0.1.2");
 
 //!! Alas, this doesn't compile, as the UDL function is declared later:
-//!!inline const SemVer SemVer::VERSION = "0.1.0"_v;
+//!!inline const SemVer SemVer::VERSION = "1.22.333"_v;
 
 
 //----------------------------------------------------------------------------

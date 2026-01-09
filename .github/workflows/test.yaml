@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  regtest-msvc:
     runs-on: windows-latest
 
     env:
@@ -29,3 +29,29 @@ jobs:
       shell: cmd
       run: |
         test\run
+
+
+  regtest-linux:
+#    name: Linux regression test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [clang++, g++]
+##        target: [linux]
+    steps:
+    - name: Checkout...
+      uses: actions/checkout@v3
+
+#    - name: Build test (for the lib)
+#      run: CC=${{ matrix.cc }} . ./tooling/build-lib.sh
+#    - name: Build
+#      run: CC=${{ matrix.cc }} . ./tooling/GH-build-test.sh
+
+#    - name: Smoke test (also of Space Test itself)
+##     `test/run "000 smoke-test"` choked on the spaces on my Debian... :-/
+#      run: ./test/run "000*"
+
+    - name: Regression tests (with auto-build)...
+      run: CC=${{ matrix.cc }} ./test/_engine/run
+#      run: SPACE_DEBUG=1 ./test/run
