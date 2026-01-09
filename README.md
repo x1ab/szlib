@@ -31,8 +31,8 @@ not kept private either.)_
 
 
 This direction alone should kinda automatically imply a bunch of derived priorities,
-decisions, best-practice principles & techniques to apply. And also some important
-freedoms: e.g. the API doesn't need be flawless, "library-grade", complete,
+decisions, best-practice principles & techniques to apply. And also some *important
+freedoms*: e.g. the API doesn't need be flawless, "library-grade", complete,
 even consistent, as professional sharing is not a priority, beyond sharing it
 with my future self. And if it can help *me, in any way*, that's already success.
 
