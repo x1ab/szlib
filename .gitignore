@@ -52,3 +52,4 @@ test/listvals
 test/semver/semver-sscanf
 test/semver/semver-strstream
 test/time.case/time
+test/diag/memdump-build-test
