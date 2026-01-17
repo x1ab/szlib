@@ -1,6 +1,6 @@
 //---------------------------------------------------------------------------
 // Raw HEX + ASCII mem. dump, with a glyph map for custom UTF-8 visualization
-// v1.0.0
+// v1.1.0
 //
 // Usage examples:
 //
@@ -41,18 +41,22 @@ public:
 			//! look away; now my sleep is gone forever! ;)
 		const Subst* mappings_ = nullptr;
 		unsigned     count_ = 0;
-		// Ctor to deduce the size of a literal map:
+		const char*  Nonprtinting_glyph_ = nullptr;
+		// Ctor to deduce the size of a literal map & cache the Nonprint. mapping, if exists:
 		template <Size N>
-		GlyphMap(const Subst (&map)[N]) : mappings_(map), count_(N) {}
+		GlyphMap(const Subst (&map)[N]) : mappings_(map), count_(N) {
+			for (unsigned i = 0; mappings_ && i < count_; ++i)
+				if (mappings_[i].key == Nonprinting) { Nonprtinting_glyph_ = mappings_[i].utf8; break; }
+		}
 		// And then we need an explicit default, too:
 		GlyphMap() = default;
-		// Find replacement, or return nullptr to defer handling to the caller:
-		template <typename BYTEISH> //! Otherwise Byte wouldn't auto-convert to Key!... :-/
-		const char* operator [] (BYTEISH b) const {
+		// Find glyph string (or return null):
+		const char* operator [] (Key b) const {
 			for (unsigned i = 0; mappings_ && i < count_; ++i) {
 				if (mappings_[i].key == (Key)b) return mappings_[i].utf8;
 			}
-			return nullptr; // No mapping, the caller should process it!
+			// No match for direct byte val., check for special keys...
+			return (b == Nonprinting && Nonprtinting_glyph_) ? Nonprtinting_glyph_ : nullptr;
 		}
 	};
 
@@ -114,7 +118,7 @@ public:
 
 			printf("%s", cfg.line_prefix);
 			if (cfg.show_pos) {
-				cfg.pos_as_addr ? printf("%p", addr) : printf("%08X", offset);
+				cfg.pos_as_addr ? printf("%p", (void*)addr) : printf("%08X", offset);
 				if (cfg.show_dec_offset)
 				printf("(%*u)", dec_offset_max_width, offset);
 				printf(":  ");
@@ -132,11 +136,12 @@ public:
 
 				// Text...
 				if (i == 8 && cfg.split_text_view) txt.append(" - "); // Middle text div:
-				// Give a chance to translation first, then check for the (non-)printing range,
-				// and display "vanilla" ASCII as-is, or show nonprs. as '.'...
-				if (auto glyph = cfg.glyph_map[byte]) txt.append(glyph);
-				else if (byte >= 32 && byte < 127) { char tmp[2] = {(char)byte, 0}; txt.append(tmp); }
-				else { txt.append("."); }
+
+				// Give a chance to translation first (because printables can be remapped too!),
+				// then display as vanilla ASCII, with '.' for nonprs...
+				if (auto glyph = cfg.glyph_map[byte])  { txt.append(glyph); }
+				else if (byte >= 32 && byte <= 126) { char tmp[2] = {(char)byte, 0}; txt.append(tmp); }
+				else { glyph = cfg.glyph_map[GlyphMap::Nonprinting]; txt.append(glyph ? glyph : "."); }
 			}
 
 			// Pad hex & text line segments if too short (for alignment)
