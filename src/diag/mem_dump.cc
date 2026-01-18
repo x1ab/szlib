@@ -69,16 +69,53 @@ int main()
 	decorated_dump.cfg.pos_as_addr = false;
 
 	H("Split text view:");
-	decorated_dump.cfg.split_text_view = true;
+	decorated_dump.cfg.group_text_too = true;
 	decorated_dump.of(map);
 
 	H("No divider for 8 bytes:");
 	decorated_dump.of(safe_zone, 24);
 
+	H("Unsplit (both):");
+	decorated_dump.cfg.groups_per_line = 1;
+	decorated_dump.of(map);
+
 	H("Zeros in the glyph map:");
 	decorated_dump.cfg.show_stats = true;
-	decorated_dump.cfg.split_text_view = false;
 	decorated_dump.cfg.hex_zero_00 = false;
+	decorated_dump.of(map);
+
+	H("9 bytes per line:");
+	decorated_dump.cfg.bytes_per_line = 9;
+	decorated_dump.cfg.hex_zero_00 = true;
+	decorated_dump.cfg.show_stats = false;
+	decorated_dump.of(map);
+
+	H("...with (asymmetric!) dividers:");
+	decorated_dump.cfg.groups_per_line = 2;
+	decorated_dump.cfg.group_text_too = true;
+	decorated_dump.of(map);
+
+	H("3 x 3:");
+	decorated_dump.cfg.groups_per_line = 3;
+	decorated_dump.cfg.text_group_sep = "|";
+	decorated_dump.cfg.text_edge      = "‖";
+	decorated_dump.of(map);
+
+	H("10 bytes, 3 groups, auto-calc. balanced group sizes:");
+	decorated_dump.cfg.bytes_per_line = 10;
+	decorated_dump.of(map);
+
+	H("11 bytes, same deal:");
+	decorated_dump.cfg.bytes_per_line = 11;
+	decorated_dump.of(map);
+
+	H("12 bytes:");
+	decorated_dump.cfg.bytes_per_line = 12;
+	decorated_dump.of(map);
+
+	H("Grouping (override) via bytes-in-group (11 by 2):");
+	decorated_dump.cfg.bytes_per_line = 11;
+	decorated_dump.cfg.grouped_bytes = 2;
 	decorated_dump.of(map);
 
 /* Just a copy-pasted template:
