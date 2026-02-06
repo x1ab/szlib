@@ -13,4 +13,4 @@ T sign(T x) {
 }
 
 }; // namespace
-#endif _SZ_SIGN_HH_
+#endif // _SZ_SIGN_HH_
