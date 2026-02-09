@@ -1,4 +1,4 @@
-// v0.2.0
+// v0.2.1
 
 #ifndef _XPWOEMWIERCUWEIRU3489367B207X2_
 #define _XPWOEMWIERCUWEIRU3489367B207X2_
@@ -100,8 +100,8 @@ inline bool to_bool(const char* cstr, int flags = str::defaults)
 		return false; // Meh, for 0...0 etc. :)
 	}
 
-	// Fast-track cheats for 1st chars (accepting anything that follows):
-	//!! Should come back here and finish it one slow, quiet day!...
+	// Fast-track *heuristic* cheat for common "false 1st chars" (regardless of what follows):
+	//!! Should revisit this on one slow, quiet day...
 	if (*cstr == 'n'
 	 || *cstr == 'N'
 	 || *cstr == 'f'
@@ -109,13 +109,22 @@ inline bool to_bool(const char* cstr, int flags = str::defaults)
 	) return false;
 
 	// "off":
-#define _sz_u32(cstr) (*(uint32_t*)(cstr))
+	if ((cstr[0] | 0x20) == 'o' && //! Bool shortcutting would prevent overread.
+	    (cstr[1] | 0x20) == 'f' &&
+	    (cstr[2] | 0x20) == 'f' &&
+	    !cstr[3]) return false;
+
+	/*!! This punning trick is unfortunately UB, for strict-aliasing and
+	     potential misalignment reasons (it could actually fail e.g. on ARM). :-(
+	     And it did trip GCC's UBsan...
 	if (cstr[1] && cstr[2] && !cstr[3]) // strlen == 3
+	#define _sz_u32(cstr) (*(const uint32_t*)(cstr))
 		if (_sz_u32(cstr) == _sz_u32("off")
 		 || _sz_u32(cstr) == _sz_u32("Off")
 		 || _sz_u32(cstr) == _sz_u32("OFF")
+	#undef _sz_u32
 		) return false;
-#undef _sz_u32
+	!!*/
 
 	return true;
 }
