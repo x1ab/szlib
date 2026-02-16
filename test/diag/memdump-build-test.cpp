@@ -1,4 +1,4 @@
-#include "diag/memdump.hh"
+#include "diag/mem_dump.hh"
 
 #define UNIT_TEST
-#include "diag/memdump.cc"
+#include "diag/mem_dump.cc"
