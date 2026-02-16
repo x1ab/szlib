@@ -1,3 +1,4 @@
+//v1.1.0
 // The (not) perfect unused-warning suppressor hack...
 // Usage: f(A unused1, B unused2) { IGNORE unused1, unused2; }
 // Sexy points over other solutions:
@@ -11,15 +12,21 @@
 // (Windows.h is the archetypal enemy, and it almost never really needs
 // that macro anyway.)
 
+//#define SZ_LANG_IGNORE_WARN_REDEF
+
 #ifdef IGNORE
 // We're kinda losing against winbase.h here...
 # ifndef _MSC_VER
-#  warning                  "Oh no, someone beat us to it: IGNORE is already taken! :-/ But never fear, let's just #undef it and win the boss fight..."
+	#ifdef SZ_LANG_IGNORE_WARN_REDEF
+	#  warning                  "Oh no, someone beat us to it: IGNORE is already taken! :-/ But never fear, let's just #undef it and win the boss fight..."
+	#endif
 # else                      // Without the quotes, GCC was freaking out about the apostrophe here..........^
 #  define _sz__STR_2(x) #x
 #  define _sz__STR(x) _sz__STR_2(x)
-#  pragma message( "Warning: Oh no, someone beat us to it: IGNORE is already taken! :-/ But never fear, let's just #undef it and win the boss fight..." \
-	" at " __FILE__ ":" _sz__STR(__LINE__)  )
+	#ifdef SZ_LANG_IGNORE_WARN_REDEF
+	#  pragma message( "Warning: Oh no, someone beat us to it: IGNORE is already taken! :-/ But never fear, let's just #undef it and win the boss fight..."\
+		" at " __FILE__ ":" _sz__STR(__LINE__)  )
+	#endif
 #  undef _sz__STR
 #  undef _sz__STR_2
 # endif // _MSC_VER
