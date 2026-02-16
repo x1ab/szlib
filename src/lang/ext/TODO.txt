@@ -1,0 +1,3 @@
+The templates in templ.hh are in an `internal` namespace!
+If that's API stuff then change that, if its truly internal, them
+move/rename the file/dir accordingly!

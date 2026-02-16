@@ -1,16 +1,16 @@
-#ifndef _90RKLJHGT45M764V6B5NC2GHDNXK86Y35J_
-#define _90RKLJHGT45M764V6B5NC2GHDNXK86Y35J_
-
-// 0.0.4
 /*****************************************************************************
-  My personal C++ "dialect add-on" and simple extensions
+  C++ "dialect add-ons" and other simple extensions
+  0.0.5
 
-  (Syntactic sugar, types, utilities etc. for ground-levelling across
-  projects, platforms, even programming languages etc.)
-
+  (Shims for ground-levelling across platforms/compilers, syntax-sugar types,
+  utilities, etc.)
 *****************************************************************************/
 
-#include "types.hh"
+#ifndef LL90RKLJHGT45M764V6B5NC2GHDNXK86Y35J
+#define LL90RKLJHGT45M764V6B5NC2GHDNXK86Y35J
+
+#include "atom/int.hh"
+
 //!!#include "a proper enum..."
 
 //!! Preprocessor:
@@ -60,4 +60,4 @@ AUTO_CONST  OFF = false;
 
 //!!??enum { UseDefault = -1 };
 
-#endif // _90RKLJHGT45M764V6B5NC2GHDNXK86Y35J_
+#endif // LL90RKLJHGT45M764V6B5NC2GHDNXK86Y35J
