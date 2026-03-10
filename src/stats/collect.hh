@@ -1,5 +1,7 @@
-#ifndef _XMDC780935NYX87457TYBNV27Y4X7C6_
-#define _XMDC780935NYX87457TYBNV27Y4X7C6_
+// 0.2.0
+
+#ifndef XMDC780935NYX87457TYBNV27Y4X7C6
+#define XMDC780935NYX87457TYBNV27Y4X7C6
 
 #include <limits>
 
@@ -7,17 +9,27 @@ namespace sz::stats {
 
 	template <typename T> struct last_total_min_max
 	{
-		T samples = 0;
-		T last = 0; // Invalid if samples == 0
-		T total = 0;
-		T min = std::numeric_limits<T>::max();
-		T max = std::numeric_limits<T>::min();
-		T umin = std::numeric_limits<T>::max();
-		T umax = 0;
+			T samples = 0;
+			T last_delta = 0; // Invalid if samples == 0
+			T total = 0;
+			T min = std::numeric_limits<T>::max();
+			T max = std::numeric_limits<T>::min();
+			T umin = std::numeric_limits<T>::max();
+			T umax = 0;
+
+		void reset() {
+			samples = 0;
+			last_delta = 0;
+			total = 0;
+			min = std::numeric_limits<T>::max();
+			max = std::numeric_limits<T>::min();
+			umin = std::numeric_limits<T>::max();
+			umax = 0;
+		}
 
 		void update(T x) {
 			++samples;
-			total += (last = x);
+			total += (last_delta = x);
 			if (x < min) min = x;
 			if (x > max) max = x;
 			auto abs_x = (x < 0 ? -x : x);
@@ -30,4 +42,4 @@ namespace sz::stats {
 
 } // namespace sz::stats
 
-#endif // _XMDC780935NYX87457TYBNV27Y4X7C6_
+#endif // XMDC780935NYX87457TYBNV27Y4X7C6
