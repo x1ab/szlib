@@ -1,8 +1,10 @@
+// v0.20.0
+
 /*
 !! Should take constexpr static config options maybe (e.g. instead of _sz_NO_MSVC_CLEANUP_)?!
 */
-#ifndef _XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH_
-#define _XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH_
+#ifndef XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH
+#define XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH
 
 
 #include <source_location>
@@ -20,18 +22,32 @@ namespace sz {
 
 #if defined(_MSC_VER) && !defined(_sz_NO_MSVC_CLEANUP_)
 
-	// ---- Compile-Time MSVC Function Signature Cleaner ---
+	// ---- Simplistic compile-time MSVC function signature cleaner ----
 	//      Typical MSVC format: `return_type __cdecl function_name(args)`
 	//      - member functions:  `return_type __cdecl MyClass::function_name(args)`
+	//	Alas, spaces also in: ... `template_func<arg1, arg2>(args)`!
+	//	And "premature" parens in `operator()()`!
+	//!!
+	//!! WOULD BE MUCH CLEANER AND CHEAPER TO JUST USE __FUNCTION__ WITH MSVC INSTEAD!
+	//!! But that would require reverting to a top-level macro API. :-(
+	//!!
 	constexpr std::string_view strip_function_name(std::string_view full_name) {
-		// Find the ( of the arg. list... - Would fail for operator()()!!
+		// Find the '(' of the arg. list... - Try to recognize operator()() too!
 		auto end = full_name.find('(');
 		if (end == std::string_view::npos) return full_name; // Should not happen, but...
+		if (full_name.substr(end).starts_with("()()")) return full_name.substr(0, end + 2);
+
+		// Try to skip the template args list, too, if present...
+		// (And avoid mixing it up with the < and << operators!)
+		auto templ_end = full_name.find_first_of('<'); //!! .find_first_of("<", 0, end) is not constexpr in MSVC! (GCC's fine.)
+		if (templ_end != std::string_view::npos
+			&& templ_end > 0 && full_name[templ_end-1] != 'e' // Not "template<"?
+		) end = templ_end;
 
 		// Reverse search for the space before the function name
 		// (Should work for both members and free functions.)
 		auto start = full_name.rfind(' ', end);
-		// Fallback for unusual names with no preceding space:
+		// Fallback for unusual ones with no preceding space:
 		if (start == std::string_view::npos) return full_name.substr(0, end);
 		
 		return full_name.substr(start + 1, end - (start + 1));
@@ -77,4 +93,4 @@ namespace sz {
 } // namespace sz
 
 
-#endif // _XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH_
+#endif // XC8DIYFHUCWED5V98TY7M9SDVH8WCR0VIYNMJH
