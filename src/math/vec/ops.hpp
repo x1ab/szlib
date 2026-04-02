@@ -1,4 +1,4 @@
-﻿//============================================================================
+//============================================================================
 // Vector operations as free functions
 //============================================================================
 
@@ -24,6 +24,9 @@ namespace VEC_NAMESPACE {
 	constexpr auto Name (const V& v, N n)
 #define _VEC_STANDALONE_SCALAR_VECT_FN_(Name) template <UniformVectorData V, Scalar N> \
 	constexpr auto Name (N n, const V& v)
+// Unary ops:
+#define _VEC_STANDALONE_UNARY_FN_(Name) template <UniformVectorData V> \
+	constexpr auto Name (const V& v)
 
 
 //!!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!! WARNING !!!!!
@@ -57,6 +60,8 @@ _VEC_STANDALONE_SCALAR_VECT_FN_(operator *);
 _VEC_STANDALONE_VECT_SCALAR_FN_(operator -);
 _VEC_STANDALONE_VECT_SCALAR_FN_(operator /);
 
+_VEC_STANDALONE_UNARY_FN_(operator -);
+
 
 } // namespace VEC_NAMESPACE
 
@@ -71,5 +76,6 @@ _VEC_STANDALONE_VECT_SCALAR_FN_(operator /);
 #undef _VEC_STANDALONE_VECT_SCALAR_FN_
 #undef _VEC_STANDALONE_BIVECT_FN_BOOL_
 #undef _VEC_STANDALONE_BIVECT_FN_
+#undef _VEC_STANDALONE_UNARY_FN_
 
 #endif // _HCVN987STD80FT7NT7GMYIURTFTYGNJKLRV_

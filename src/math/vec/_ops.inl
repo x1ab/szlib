@@ -198,6 +198,13 @@ _VEC_STANDALONE_BIVECT_FN_BOOL_(operator ==) {
 	}(v1, v2, std::make_integer_sequence<unsigned, V1::dim>{});
 }
 
+_VEC_STANDALONE_UNARY_FN_(operator -) {
+	return []<unsigned... I>(const auto& _v, std::integer_sequence<unsigned, I...>)
+	constexpr {
+		return V(-_v.template get<I>()...);
+	}(v, std::make_integer_sequence<unsigned, V::dim>{});
+}
+
 _VEC_STANDALONE_BIVECT_OP_DEF_(+)
 _VEC_STANDALONE_BIVECT_OP_DEF_(-)
 _VEC_STANDALONE_BIVECT_OP_DEF_(*)
