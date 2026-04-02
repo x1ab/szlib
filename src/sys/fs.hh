@@ -1,9 +1,13 @@
-// v0.3.1
+// v0.3.2
 
 #ifndef _SZLSF39847G45796GK890G676G42GF35_
 #define _SZLSF39847G45796GK890G676G42GF35_
 
-#include <filesystem>
+#include <filesystem> //!! Req. by getcwd()! But only used by dirname/basename, as a convenience! :-(
+	//!! Separate the ones that use this (into a heavy header, not to
+	//!! repeat C++'s mistake) from the pure string manip. functions!
+	//!! Not just for header health, but also for the semantic reason.
+	//!! (Even move those that can be used for non-fs path to str!)
 #include <string>
 #include <string_view>
 #include <assert.h>
@@ -79,6 +83,9 @@ inline bool is_absolute(std::string_view path)
 }
 
 	//--------------------------------------------------------------------
+	//!! These don't even need std::string_view actually; a local ad-hoc
+	//!! (ptr, len) signature should be used, maybe defining it as a struct
+	//!! just for doc.
 	namespace internal {
 
 		inline bool syntactically_unprefixable(std::string_view path)

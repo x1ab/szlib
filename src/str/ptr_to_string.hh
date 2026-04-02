@@ -1,4 +1,4 @@
-// 0.1.1
+// 0.2.0
 // C++20 for fn(auto)
 
 #include <string>
