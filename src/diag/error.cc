@@ -24,6 +24,8 @@ using namespace std;
 
 
 namespace sz {
+using namespace err; //!! Can't do namespace err {...} yet, as only some parts are declared in that!
+
 
 namespace {
 	auto src_loc_suffix = [](const src_loc& loc, const char* preposition = "at") {
@@ -88,6 +90,8 @@ void BUG_impl   (const src_loc& loc, std::string_view message, ...)
 		<< msg.str();
 
 	cerr	<< msg.str() << endl;
+
+	//!! Bug() may need a flag to abort on its own (like Fatal), or a FatalBug() is needed!
 }
 
 void ABORT_impl   (const src_loc& loc, std::string_view message, ...)
@@ -105,8 +109,17 @@ void ABORT_impl   (const src_loc& loc, std::string_view message, ...)
 		LOG	<< prefix << "...";
 		cerr	<< prefix << "..." << "\n";
 	}
-	// Well, this requires a try{} block around main, with a matching catch (FatalError& or std::exception)!
-	throw FatalError(message, loc);
+
+	switch (cfg_abort_method) {
+		case AbortMethod::Abort: std::abort();
+		case AbortMethod::Exit:  std::exit(cfg_abort_exit_code);
+//!!??		case AbortMethod::Debug: ...??
+		case AbortMethod::Throw:
+		default:                 throw FatalError(message, loc);
+			// This requires a try{} block around main, with a matching catch (FatalError& or std::exception)!
+			//!! ALSO: The app may not even have exceptions enabled!!
+	}
+
 }
 
 } // namespace sz

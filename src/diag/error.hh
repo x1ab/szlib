@@ -1,12 +1,12 @@
-// v0.2.0
+// v0.3.0
 //============================================================================
 // Error handling & (user-facing) reporting utilities
 //
 // (For introspection/debug tools see e.g. log.hh, DBG.hh etc.)
 //============================================================================
 
-#ifndef _CM029874Y687G43YT078GN6RTCF039VM74B5NTYN798_
-#define _CM029874Y687G43YT078GN6RTCF039VM74B5NTYN798_
+#ifndef SZERRCM029874Y687G43YT078GN6RTCF039VM74B5NTYN798
+#define SZERRCM029874Y687G43YT078GN6RTCF039VM74B5NTYN798
 
 
 //----------------------------------------------------------------------------
@@ -85,6 +85,21 @@ using namespace std::string_literals;
 
 
 namespace sz {
+namespace err {
+
+
+// Crude way to allow configuring the termination method via Abort():
+enum class AbortMethod {
+	Throw,
+	Abort,
+	Exit,
+//!!	Debug,
+};
+inline AbortMethod cfg_abort_method = AbortMethod::Throw;
+inline int         cfg_abort_exit_code = -1;
+
+} // namespace err //!! Should wrap the whole shebang one day, though!...
+
 
 // ---- FatalError exception...
 #ifdef _sz_ERROR_USE_MEMCPY_
@@ -123,12 +138,13 @@ void ABORT_impl   (const src_loc& loc, std::string_view message = "", ...);
 //----------------------------------------------------------------------------
 // OK, the API now, for reeal...
 //----------------------------------------------------------------------------
-inline void Note   (std::string_view msg     , const src_loc& loc = src_loc::current()) { NOTE_impl   (loc, msg); }
-inline void Warning(std::string_view msg     , const src_loc& loc = src_loc::current()) { WARNING_impl(loc, msg); }
-inline void Error  (std::string_view msg     , const src_loc& loc = src_loc::current()) { ERROR_impl  (loc, msg); }
-inline void Fatal  (std::string_view msg     , const src_loc& loc = src_loc::current()) { FATAL_impl  (loc, msg); }
-inline void Bug    (std::string_view msg     , const src_loc& loc = src_loc::current()) { BUG_impl    (loc, msg); }
-inline void Abort  (std::string_view msg = "", const src_loc& loc = src_loc::current()) { ABORT_impl  (loc, msg); }
+inline void Note     (std::string_view msg     , const src_loc& loc = src_loc::current()) { NOTE_impl   (loc, msg); }
+inline void Warning  (std::string_view msg     , const src_loc& loc = src_loc::current()) { WARNING_impl(loc, msg); }
+inline void Error    (std::string_view msg     , const src_loc& loc = src_loc::current()) { ERROR_impl  (loc, msg); }
+inline void Fatal    (std::string_view msg     , const src_loc& loc = src_loc::current()) { FATAL_impl  (loc, msg); }
+inline void Bug      (std::string_view msg     , const src_loc& loc = src_loc::current()) { BUG_impl    (loc, msg); }
+inline void FatalBug (std::string_view msg     , const src_loc& loc = src_loc::current()) { BUG_impl    (loc, msg); ABORT_impl  (loc, msg); }
+inline void Abort    (std::string_view msg = "", const src_loc& loc = src_loc::current()) { ABORT_impl  (loc, msg); }
 
 } // namespace sz
 
@@ -137,7 +153,7 @@ using sz::Note;
 using sz::Warning;
 using sz::Error;
 using sz::Fatal;
-using sz::Bug;
+using sz::Bug; // (FatalBug is newer than the legacy macro calls, so not needed.)
 using sz::Abort;
 
 
@@ -184,7 +200,9 @@ inline int report_file_error(std::string_view fname,
 	return errno_snapshot;
 }
 
+
+//!! } // namespace err
 } // namespace sz
 
 
-#endif // _CM029874Y687G43YT078GN6RTCF039VM74B5NTYN798_
+#endif // SZERRCM029874Y687G43YT078GN6RTCF039VM74B5NTYN798
