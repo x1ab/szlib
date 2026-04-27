@@ -1,7 +1,7 @@
-// v0.2.1
+// v0.3.0
 
-#ifndef _XPWOEMWIERCUWEIRU3489367B207X2_
-#define _XPWOEMWIERCUWEIRU3489367B207X2_
+#ifndef SZSTRXPWOEMWIERCUWEIRU3489367B207X2
+#define SZSTRXPWOEMWIERCUWEIRU3489367B207X2
 
 #include <cstring>
 #include <cctype>  // isspace, toupper, ...
@@ -82,62 +82,9 @@ inline bool escape_chars(std::string* str, const char* escapees, char escmark = 
 }
 
 
-//----------------------------------------------------------------------------
-namespace str { enum: int { defaults, empty_is_true }; }
-inline bool to_bool(const char* cstr, int flags = str::defaults)
-//
-// Supported false values (everything else is consireder true):
-//      empty (""), 0[0...], and (mixed-case variations of) false, no, none, off.
-//
-{
-	assert(cstr);
-
-	if (!*cstr) return flags & str::empty_is_true;
-
-	if (*cstr == '0') { // false also if 00000 or 0.0, but not 012 or 0.012!
-		while (*++cstr)
-			if (*cstr != '0' && *cstr != '.') return true;
-		return false; // Meh, for 0...0 etc. :)
-	}
-
-	// Fast-track *heuristic* cheat for common "false 1st chars" (regardless of what follows):
-	//!! Should revisit this on one slow, quiet day...
-	if (*cstr == 'n'
-	 || *cstr == 'N'
-	 || *cstr == 'f'
-	 || *cstr == 'F'
-	) return false;
-
-	// "off":
-	if ((cstr[0] | 0x20) == 'o' && //! Bool shortcutting would prevent overread.
-	    (cstr[1] | 0x20) == 'f' &&
-	    (cstr[2] | 0x20) == 'f' &&
-	    !cstr[3]) return false;
-
-	/*!! This punning trick is unfortunately UB, for strict-aliasing and
-	     potential misalignment reasons (it could actually fail e.g. on ARM). :-(
-	     And it did trip GCC's UBsan...
-	if (cstr[1] && cstr[2] && !cstr[3]) // strlen == 3
-	#define _sz_u32(cstr) (*(const uint32_t*)(cstr))
-		if (_sz_u32(cstr) == _sz_u32("off")
-		 || _sz_u32(cstr) == _sz_u32("Off")
-		 || _sz_u32(cstr) == _sz_u32("OFF")
-	#undef _sz_u32
-		) return false;
-	!!*/
-
-	return true;
-}
-
-inline bool to_bool(const std::string& str, int flags = str::defaults)
-{
-	return to_bool(str.c_str(), flags);
-}
-
-
 } // namespace sz
 
-#endif // _XPWOEMWIERCUWEIRU3489367B207X2_
+#endif // SZSTRXPWOEMWIERCUWEIRU3489367B207X2
 
 
 //============================================================================
@@ -152,9 +99,7 @@ int main(int argc, char** argv)
 {
 	if (argc < 2) return false;
 
-	std::cout << argv[1] <<" to bool: "<< to_bool(argv[1]) <<'\n';
-	std::cout << "...and also with empty_is_true:\n";
-	std::cout << "\"\"" <<" to bool: "<< to_bool("", sz::str::empty_is_true) <<'\n';
+	cerr <<  "- ERROR: NO TESTS YET! :(\n";
 }
 
 #endif
