@@ -1,6 +1,6 @@
-// v0.3.0
+// v0.4.0
 //============================================================================
-// Error handling & (user-facing) reporting utilities
+// Macroless error-handling & user-facing reporting utilities
 //
 // (For introspection/debug tools see e.g. log.hh, DBG.hh etc.)
 //============================================================================
@@ -148,14 +148,14 @@ inline void Abort    (std::string_view msg = "", const src_loc& loc = src_loc::c
 
 } // namespace sz
 
-// Support existing macro-based code:
+/*!! NO LONGER: Support existing macro-based code:
 using sz::Note;
 using sz::Warning;
 using sz::Error;
 using sz::Fatal;
 using sz::Bug; // (FatalBug is newer than the legacy macro calls, so not needed.)
 using sz::Abort;
-
+!!*/
 
 //----------------------------------------------------------------------------
 // Old-school CRT/errno reporting helpers
