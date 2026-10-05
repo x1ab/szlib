@@ -8,9 +8,12 @@
 //!!
 
 #include <sstream>
+	using std::ostringstream;
 #include <iostream>
-using namespace std;
 
+//using namespace std; //! If log.hh was included with SZ_LOG_REPLACE_IOSTREAM (e.g. by an adapter/wrapper,
+                       //! like in O2N...), this IS NOT ENOUGH to pin the cerr/endl calls to std! :-o
+                       //! Better just to qualify them individually...
 
 //!!
 //!! NOTE:
@@ -22,10 +25,11 @@ using namespace std;
 //!! - Similarly, we assume that the logger _may not_ add the source location already (so we do it here, risking duplication).
 //!!
 
-
 namespace sz {
 using namespace err; //!! Can't do namespace err {...} yet, as only some parts are declared in that!
 
+//!! No, this doesn't work either (comp. error: conflicting `using`...):
+//!!using std::cerr, std::endl; //! Must be inside sz::, to override any SZ_LOG_REPLACE_IOSTREAM shenanigans!
 
 namespace {
 	auto src_loc_suffix = [](const src_loc& loc, const char* preposition = "at") {
@@ -38,40 +42,36 @@ namespace {
 }
 
 void NOTE_impl (const src_loc& loc, std::string_view message, ...)
-// The source location is omitted from the  write the location!
 {
-//	auto msg = ostringstream()
-//		<< message << src_loc_suffix(loc);
+// The source location is omitted from the plain cerr output:
+//	auto msg = ostringstream() << message << src_loc_suffix(loc);
 
-	LOGN	<< message << src_loc_suffix(loc);
-	cerr	<< "Note: " << message << endl;
+	LOGN      << message << src_loc_suffix(loc);
+	std::cerr << "Note: " << message << std::endl;
 }
 
 void WARNING_impl (const src_loc& loc, std::string_view message, ...)
 {
-	auto msg = ostringstream()
-		<< message << src_loc_suffix(loc);
+	auto msg = ostringstream() << message << src_loc_suffix(loc);
 
-	LOGW	<< msg.str();
-	cerr	<< "Warning: " << msg.str() << endl;
+	LOGW      << msg.str();
+	std::cerr << "Warning: " << msg.str() << std::endl;
 }
 
 void ERROR_impl   (const src_loc& loc, std::string_view message, ...)
 {
-	auto msg = ostringstream()
-		<< message << src_loc_suffix(loc);
+	auto msg = ostringstream() << message << src_loc_suffix(loc);
 
-	LOGE	<< msg.str();
-	cerr	<< "- ERROR: " << msg.str() << endl;
+	LOGE      << msg.str();
+	std::cerr << "- ERROR: " << msg.str() << std::endl;
 }
 
 void FATAL_impl   (const src_loc& loc, std::string_view message, ...)
 {
-	auto msg = ostringstream()
-		<< message << src_loc_suffix(loc);
+	auto msg = ostringstream() << message << src_loc_suffix(loc);
 
-	LOGF	<< msg.str();
-	cerr	<< "- FATAL ERROR: " << msg.str() << endl;
+	LOGF      << msg.str();
+	std::cerr << "- FATAL ERROR: " << msg.str() << std::endl;
 
 	Abort();
 }
@@ -85,11 +85,10 @@ void BUG_impl   (const src_loc& loc, std::string_view message, ...)
 		<< message << "\n"
 		<< "****************\n";
 
-	LOGE	//!!<< "\n" // Guarantee an empty line after a possible "ERROR: " log entry prefix
-		//!!        // — but there would be *two* empty lines if no prefix; awkward!...
-		<< msg.str();
-
-	cerr	<< msg.str() << endl;
+	LOGE  //!!<< "\n" // Guarantee an empty line after a possible "ERROR: " log entry prefix
+	      //!!        // — but there would be *two* empty lines if no prefix; awkward!...
+	          << msg.str();
+	std::cerr << msg.str() << std::endl;
 
 	//!! Bug() may need a flag to abort on its own (like Fatal), or a FatalBug() is needed!
 }
@@ -99,15 +98,15 @@ void ABORT_impl   (const src_loc& loc, std::string_view message, ...)
 	const char* prefix = "--- ABORTING";
 	if (message != "") {
 //		if (loc) {
-			LOG	<< message << src_loc_suffix(loc);
-			cerr	<< prefix << ": " << message << src_loc_suffix(loc) << endl;
+			LOG       << message << src_loc_suffix(loc);
+			std::cerr << prefix << ": " << message << src_loc_suffix(loc) << std::endl;
 //		} else {
-//			LOG	<< message;
-//			cerr	<< prefix << ": " << message << endl;
+//			LOG       << message;
+//			std::cerr << prefix << ": " << message << std::endl;
 //		}
 	} else {
-		LOG	<< prefix << "...";
-		cerr	<< prefix << "..." << "\n";
+		LOG       << prefix << "...";
+		std::cerr << prefix << "..." << std::endl;
 	}
 
 	switch (cfg_abort_method) {
