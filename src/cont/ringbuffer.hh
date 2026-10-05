@@ -1,7 +1,7 @@
-// 0.0.32
+// 0.0.33
 
-#ifndef _RINGBUFFER_DX298E76Y5FNE78573X8H7HY_
-#define _RINGBUFFER_DX298E76Y5FNE78573X8H7HY_
+#ifndef RINGBUFFER_DX298E76Y5FNE78573X8H7HY
+#define RINGBUFFER_DX298E76Y5FNE78573X8H7HY
 
 #include <cstddef> // size_t
 //#include <cassert>
@@ -10,9 +10,7 @@ template <typename T, std::size_t Capacity, T ErrorValue>
 //!!TODO: Prevent Capacity == 0
 class RingBuffer_Static_Int // vanilla copy semantics!
 {
-// This implementation is only efficient for small (copyable) integral types.
-// (Reference semantics would insist on using pointers (even with -Os), so
-// that's for bigger types.)
+// This implementation is meant to be used for small, copyable types.
 //
 // Error handling policy:
 //
@@ -138,4 +136,4 @@ protected:
 
 };
 
-#endif // _RINGBUFFER_DX298E76Y5FNE78573X8H7HY_
+#endif // RINGBUFFER_DX298E76Y5FNE78573X8H7HY

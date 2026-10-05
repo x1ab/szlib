@@ -1,8 +1,9 @@
-// v0.3.2
+// Simple macroless unit-test runner
+// v0.4.0
 // c++20
 
-#ifndef _SZXCVBN3807R5YT68FNUGVHM678_
-#define _SZXCVBN3807R5YT68FNUGVHM678_
+#ifndef SZXCVBN3807R5YT68FNUGVHM678
+#define SZXCVBN3807R5YT68FNUGVHM678
 
 /* Example usage:
 
@@ -14,12 +15,12 @@ int main()
 
 	Test(
 	// Optional title (the default is made of the file, line, func. of the Test call):
-		"szlib/sys/is_absolute"),
-	// The test subject:
+		"szlib/sys/is_absolute",
+	// The callable test subject, accepting the params passed to `In{...}`:
 		is_absolute,
-	// Optional flags:
+	// Optional test run flags:
 		Stop_on_Failure)
-	// Cases:
+	// List of test cases:
 		.run( In{ ""  }, Expect{ false } )
 		.run( In{ " " }, Expect{ false } )
 		.sep()                                       // With optional text instead of the default dashes.
@@ -27,7 +28,7 @@ int main()
 		.skip( In{"nothing"}, Expect{"good things"}, "Not implemented!" ) // The "reason" is optional.
 	;
 
-	OR, using a wrapper to provide insight into what each test case does:
+	OR, using a wrapper defined inline (to print some extra info for each TC):
 
 	Test	("is_absolute", [](string_view p) {
 			bool abs = is_absolute(p);
@@ -105,21 +106,20 @@ NOTES:
 namespace sz::test {
 
 // ---- The ubiquitous "Function Traits" helper that should be std::,
-//     but never will, because C++... ---
-
-// Primary template (unimplemented)
+//      but probably never will... :-/
+// Primary template (unimplemented):
 template<typename T>
 struct function_traits;
-// Specialization for regular function pointers
+// Specialization for regular function pointers:
 template<typename R, typename... Args>
 struct function_traits<R(*)(Args...)> {
     using signature = R(Args...);
 };
 // Specialization for any callable object with an operator()
-// (lambdas, functors, etc.)
+// (lambdas, functors, etc.):
 template<typename T>
 struct function_traits : function_traits<decltype(&T::operator())> {};
-// Specializations for member function pointers (for the operator() case)
+// Specializations for member function pointers (for the operator() case):
 template<typename C, typename R, typename... Args>
 struct function_traits<R(C::*)(Args...)> {
     using signature = R(Args...);
@@ -182,15 +182,9 @@ enum TestFlags {                       //!! Too much collision risk for just `Fl
 		No_Auto_Summary      = 8, // Call test.report() manually for a summary.
 };
 
-//----------------------------------------------------------------------------
-struct TestStats
-{
-	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
-	static constexpr auto _SEP____NL = " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n";
-	static constexpr auto _EQ_____NL = "==============================================================================\n";
-	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
-	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
-
+	//----------------------------------------------------------------------------
+	//!! C++ bullshit: must be defined outside the class (TestStats) if it's
+	//!! initialized inside the class (which is mandatory for an inline static...)
 	// State:
 	struct Stats {
 	  int	cases_total = 0,
@@ -207,10 +201,22 @@ struct TestStats
 			cases_skipped_implicitly += rhs.cases_skipped_implicitly;
 			return *this;
 		}
-	} stats;
+		bool ok() const { return !cases_failed; }
+	};
+//----------------------------------------------------------------------------
+struct TestStats
+{
+	static constexpr auto ________NL = "------------------------------------------------------------------------------\n";
+	static constexpr auto _SEP____NL = " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n";
+	static constexpr auto _EQ_____NL = "==============================================================================\n";
+	static constexpr auto _B______NL = "/-----------------------------------------------------------------------------\n";
+	static constexpr auto _E______NL = "\\-----------------------------------------------------------------------------\n";
+
+	// Per-instance results:
+	Stats stats;
 
 	// Accumulated results from all runs in the same thread:
-	thread_local static Stats global_stats; // See its def. below the class!
+	inline static thread_local Stats global_stats{};
 
 	//--------------------------------------------------------------------
 	static void report(Stats& stats = TestStats::global_stats)
@@ -226,7 +232,7 @@ struct TestStats
 
 			std::cerr << ________NL; // Trust the prev. run/skip outputs to always end with \n...
 
-			if (!stats.cases_failed) {
+			if (stats.ok()) {
 				std::cerr
 					<< " OK."
 					<< " ("
@@ -284,7 +290,7 @@ protected:
 
 			std::cerr << ________NL;
 
-			if (!stats.cases_failed) {
+			if (stats.ok()) {
 				std::cerr << " ALL OK." << "\n";
 			} else {
 				std::cerr
@@ -303,9 +309,6 @@ protected:
 		std::cerr << _EQ_____NL;
 	}
 };
-
-// Accumulated results from all runs in the same thread:
-thread_local TestStats::Stats TestStats::global_stats{};
 
 
 //----------------------------------------------------------------------------
@@ -446,6 +449,10 @@ public:
 	}
 
 	//--------------------------------------------------------------------
+	bool ok() const { return stats.ok(); }
+
+
+	//--------------------------------------------------------------------
 	auto& show_header()
 	{
 		std::cerr
@@ -485,7 +492,7 @@ protected:
 	bool __prepare_tc_run(bool run_mode, std::string_view comment = "")
 	{
 		++stats.cases_total;
-		if (flags & Stop_On_Failure && stats.cases_failed) {
+		if (flags & Stop_On_Failure && !ok()) {
 			++stats.cases_skipped_implicitly;
 			return false;
 		}
@@ -667,4 +674,4 @@ int main()
 } // main
 #endif // UNIT_TEST_TEST
 
-#endif // _SZXCVBN3807R5YT68FNUGVHM678_
+#endif // SZXCVBN3807R5YT68FNUGVHM678
