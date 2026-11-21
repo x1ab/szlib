@@ -1,4 +1,4 @@
-// 0.2.1
+// 0.3.0
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
@@ -44,7 +44,7 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 	(so, e.g. in the STL sense, this isn't even a container; see later).
 	Copying the container (considered to be a resource manager) is
 	disabled, too.
-	!! BUT: the "POD-like" restriction goes directly against the "resource manager" assumption! :-o
+	!! BUT: the "POD-like T" restriction goes directly against the "resource manager" assumption! :-o
 
 	Otherwise, the usual STL-like semantics applies: default-constructed
 	empty cells, by-value copy on 'store' (via op=), the usual STL-like
@@ -110,12 +110,14 @@ public:
 
 	//!! Can't call this "reserve", STL "owns" that for a diff. concept... :-(
 	[[nodiscard]] key_t alloc() { // Or return ERROR
-		if (full()) return ERROR; // No assert, unlike for double free!
-		else return _pop_free();
+		if (full()) return ERROR; // Not assert, unlike for double free!
+		++gen_;
+		return _pop_free();
 	}
 	key_t store(const T& cargo) {
 		if (key_t slot; ERROR == (slot = alloc())) return ERROR;
-		else { store(slot, cargo); return slot; }
+		store(slot, cargo);
+		return slot;
 	}
 	T& store(key_t slot, const T& cargo) {
 		assert(slot != ERROR);
@@ -128,6 +130,7 @@ public:
 		assert(slot < capacity_);
 		assert(!_is_free(slot)); // Double free?
 		_push_free(slot);
+		++gen_;
 	}
 
 	// Alloc/free synonyms (until I can decide which set to keep...):
@@ -162,7 +165,8 @@ public:
 	bool is_free(key_t slot) const {
 //std::cerr << "- checking key at is_free: " << slot << endl;
 		assert(slot != ERROR);
-		assert(slot >= 0);
+		// "Always true" warning (with GCC), if key_t is unsigned... which it is:
+		//assert(slot >= 0);
 		assert(slot < capacity_);
 		//assert(!empty()); // Well, every key is free if there's nothing allocated... :)
 		return _is_free(slot); }
@@ -182,11 +186,11 @@ public:
 		assert(end_free_i_ == capacity_);
 
 #ifdef DEBUG
-		for (auto i = 0; i < capacity_; ++i) {
+		for (std::size_t i = 0; i < capacity_; ++i) {
 			assert(free_stack_[i] == i);
 		}
 		// Note: this'll undo _push_free's '~' poisoning:
-		for (auto i = 0; i < capacity_; ++i) {
+		for (std::size_t i = 0; i < capacity_; ++i) {
 			*reinterpret_cast<char*>(&slots_[i]) = '_';
 		}
 #endif		
@@ -194,32 +198,51 @@ public:
 
 	lockers(const lockers&) = delete; // No copy!
 
-/*
-	// This is a limited, not-very-useful "iterator offering" for now, just
-	// to support range-based for to go through *each existing* storage slot
-	// (i.e. not each *actually used* one)!
-	T*       begin()       { return &slots_[0]; }
-	T*       end()         { return begin() + capacity_; }
-	const T* begin() const { return &slots_[0]; }
-	const T* end()   const { return begin() + capacity_; }
-	const T* cbegin()      { return begin(); }
-	const T* cend()        { return end(); }
-	// Convert auto iterators provided by a range-for back to keys:
-	key_t key(const T* it) const {
-//std::cerr << "- key(): " << hex << (void*) it << " -> " << dec << (it - &slots_[0]) << endl;
-		return it - &slots_[0]; }
-*/
+	// Iterable snapshot copy of the currently allocated keys.
+	// Any alloc/free on the source container invalidates it (asserted on access).
+	// Usage: for (auto& x : sz::lockers<...>::each(l)) ..., or
+	// s.key(i) to get the slot handles (keys).
+	struct each
+	{
+		each(lockers& src) : src_(src), gen_(src.gen_)
+		{
+			for (key_t k = 0; k < src.capacity_; ++k)
+				if (!src._is_free(k)) keys_[size_++] = k;
+		}
 
+		std::size_t size() const { return size_; }
+		key_t key(std::size_t i) const { assert(i < size_); return keys_[i]; }
+		T& operator [](std::size_t i) { _check(); assert(i < size_); return src_.slots_[keys_[i]]; }
+
+		struct iterator {
+			each* s; std::size_t i;
+			T& operator *() const { return (*s)[i]; }
+			iterator& operator ++() { ++i; return *this; }
+			bool operator !=(const iterator& other) const { return i != other.i; }
+		};
+		iterator begin() { return {this, 0}; }
+		iterator end()   { return {this, size_}; }
+
+	protected:
+		void _check() const { assert(gen_ == src_.gen_ && "lockers::snapshot used after alloc/free!"); }
+
+		lockers&    src_;
+		std::size_t gen_;
+		key_t       keys_[MAX];
+		std::size_t size_ = 0;
+	};
 
 protected:
 	//--------------------------------------------------------------------
 	// Internals - Data...
 
 	std::size_t  capacity_ = MAX; //!! A DYNAMIC-GROWTH OPTION NOT YET IMPL.!
-	                              //!! FTR, that would break the "stable addresses" trait too!
+	                              //!! FTR, that would break the "stable addresses" trait though.
 	T            slots_[MAX];
 	key_t        free_stack_[MAX];
 	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Enjoy the "illiteration"... ;) )
+	std::size_t  gen_ = 0;        // Generation counter to track container-level structural changes
+	                              // (add/remove, later: realloc), to support iterator validity checking
 
 	//--------------------------------------------------------------------
 	// Internals - Utilities...
@@ -246,7 +269,7 @@ protected:
 	}
 #endif
 	bool _is_free(key_t slot) const {
-		for (auto free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
+		for (std::size_t free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
 			if (slot == free_stack_[free_i]) return true;
 		return false;
 	}
@@ -288,14 +311,14 @@ protected:
 
 
 //----------------------------------------------------------------------------
-#ifdef UNIT_TEST
+#ifdef UNIT_TEST // g++ -x c++ lockers.hh -DUNIT_TEST -DDEBUG -Wall -Wextra -pedantic
 #include <iostream>
 using namespace std;
 using namespace sz;
 
 template <class T>
 auto dump_state = [](const T& lockers) {
-	for (auto slot = 0; slot < lockers.capacity(); ++slot) {
+	for (std::size_t slot = 0; slot < lockers.capacity(); ++slot) {
 #ifdef DEBUG
 //		cout << (char)lockers[slot]; // The DEBUG extensions have already marked the free items.
 		                             // Umm... But... [] access is disallowed for freed items, so:
@@ -349,6 +372,27 @@ int main()
 //	dump_state<L>(slots);
 
 	slots.store('Z'); // Should replace 'a'
+	dump_state<L>(slots);
+
+	//--------------------------------------------------------------------
+	cout << "Iteration via lockers::each...\n";
+
+	// Iteration via snapshot
+	slots.free(b);
+	{	L::each s(slots);
+		assert(s.size() == slots.size());
+		cout << "each (allocated): ";
+		for (auto& x : s) { cout << x; x &= ~0x20; } // Print, then uppercase in place
+		cout << '\n';
+		for (std::size_t i = 0; i < s.size(); ++i) assert(slots[s.key(i)] == s[i]);
+		dump_state<L>(slots); // Changes went to the locker itself
+
+		slots.store(s.key(0), '!'); // Content change: snapshot stays valid
+		assert(s[0] == '!');
+
+		slots.free(s.key(0));
+//		s[0]; // Structural change: should fail the gen. check!
+	}
 	dump_state<L>(slots);
 }
 #endif // UNIT_TEST
