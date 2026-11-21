@@ -1,4 +1,4 @@
-// 0.2.0
+// 0.2.1
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
@@ -7,8 +7,10 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 	from a managed pool of a fixed number of contiguous cells (as long
 	as there are free ones left), and store a value of type T there.
 
-	T must be "trivially destructible" (POD-like): no actual destructor
+	T must be `trivially destructible` (POD-like): no actual destructor
 	call is made on free()! (-> #25)
+	!! BUT: The byte-poisoning in DEBUG mode also implicitly imposes
+	!! `trivially_constructible`, or in fact even more restrictions! :-o
 
 	Each cell represents a resource, and the key of the cell is
 	meant to be used as a handle to that resource. Each key is unique
@@ -24,8 +26,8 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 
 	Later, when done using the slot, its key should be "returned" to
 	the container, so the cell can be freed for reuse.
-	(Subsequent use of the same cell is not guaranteed to have the same
-	key assigned to it as before; actually, the notion of "same cell"
+	(Subsequent allocation of the same cell is not guaranteed to assign
+	the same key to it as before; actually, the notion of "same cell"
 	isn't even defined: it's always just one isolated cell that can be
 	accessed via a key, and there is no defined relation between cells
 	or keys.)
@@ -34,14 +36,15 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 	implicitly discarded: "deemed invalid", but not ~destructed.
 	This means that actually destroying (destructing, deallocating)
 	a tracked (stored) resource is completely out of scope for this
-	of the container.
+	container.
 
-	Accessing the cell's content (i.e. to store or retrieve a T value
-	value) is done via the usual key-value map semantics. There is
-	no ordering defined among the elements. There isn't even iterator
-	support either (so, e.g. in the STL sense, this isn't even a
-	container; see later). Copying the container (considered to be
-	a resource manager) is disabled, too.
+	Accessing the cell's content (i.e. to store or retrieve a T value)
+	is done via the usual key-value map semantics. There is no ordering
+	defined among the elements. There isn't even iterator support either
+	(so, e.g. in the STL sense, this isn't even a container; see later).
+	Copying the container (considered to be a resource manager) is
+	disabled, too.
+	!! BUT: the "POD-like" restriction goes directly against the "resource manager" assumption! :-o
 
 	Otherwise, the usual STL-like semantics applies: default-constructed
 	empty cells, by-value copy on 'store' (via op=), the usual STL-like
@@ -58,11 +61,6 @@ NOTES:
     -	The keys are opaque, and the elements are not ordered, because in
 	the target use case those elements live entirely independently, not
 	forming a set that would (often) need to be manipulated as a whole.
-
-	The owner of the container may still need to iterate through the
-	elements occasionally, which can be done "manually", using the
-	pool() query, and the guarantee that it's actually a sequential,
-	contiguous storage of a known number of cells.
 
     -	Iterating over the *allocated* slots could be expensive. Note:
 	just going through every *existing* (possibly free) cell makes
@@ -94,7 +92,7 @@ NOTES:
 #ifndef LKR3986GH78F786D102D75426748GB
 #define LKR3986GH78F786D102D75426748GB
 
-#include <cstdint> // size_t
+#include <cstddef> // size_t
 #include <cassert>
 
 namespace sz {
@@ -121,12 +119,14 @@ public:
 	}
 	T& store(key_t slot, const T& cargo) {
 		assert(slot != ERROR);
+		assert(slot < capacity_);
 		assert(!_is_free(slot));
 		return slots_[slot] = cargo; } // Support method-chaining
 	void free(key_t slot) {
 		assert(!empty());
 		assert(slot != ERROR);
-		assert(!_is_free(slot)); // Double free!
+		assert(slot < capacity_);
+		assert(!_is_free(slot)); // Double free?
 		_push_free(slot);
 	}
 
@@ -140,11 +140,13 @@ public:
 	const T& operator [](key_t key) const {
 		assert(!empty());
 		assert(key != ERROR);
+		assert(key < capacity_);
 		assert(!_is_free(key));
 		return slots_[key]; }
 	T& operator [](key_t key) {
 		assert(!empty());
 		assert(key != ERROR);
+		assert(key < capacity_);
 		assert(!_is_free(key));
 		return slots_[key]; }
 
@@ -154,11 +156,8 @@ public:
 	bool empty()    const { assert(end_free_i_ <= capacity_); return end_free_i_ == capacity_; }
 	bool full()     const { return end_free_i_ == 0; }
 	auto size()     const { return capacity_ - end_free_i_; }
-	auto capacity() const { assert(capacity_ == MAX); // a) for now..., b) Unbelievable: fails with MSVC /DBDEBUG! :-o
+	auto capacity() const { assert(capacity_ == MAX); //!! a) for now..., b) Unbelievable: fails with MSVC /DDEBUG! :-o
 	                        return capacity_; }
-
-	const T* pool() const { return slots_; }
-	      T* pool()       { return slots_; }
 
 	bool is_free(key_t slot) const {
 //std::cerr << "- checking key at is_free: " << slot << endl;
@@ -186,8 +185,9 @@ public:
 		for (auto i = 0; i < capacity_; ++i) {
 			assert(free_stack_[i] == i);
 		}
+		// Note: this'll undo _push_free's '~' poisoning:
 		for (auto i = 0; i < capacity_; ++i) {
-			slots_[i] = (T)'_';
+			*reinterpret_cast<char*>(&slots_[i]) = '_';
 		}
 #endif		
 	}
@@ -219,7 +219,7 @@ protected:
 	                              //!! FTR, that would break the "stable addresses" trait too!
 	T            slots_[MAX];
 	key_t        free_stack_[MAX];
-	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Nice "illiteration", eh? ;) )
+	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Enjoy the "illiteration"... ;) )
 
 	//--------------------------------------------------------------------
 	// Internals - Utilities...
@@ -228,7 +228,9 @@ protected:
 		assert(!empty());
 		free_stack_[end_free_i_++] = k;
 #ifdef DEBUG
-		slots_[k] = (T)'~'; // Mark the freed element (with some luck with T... :) )
+		// Poison/mark the freed item as "discarded".
+		// (Gambling on T's op= not being confused by the junk there.)
+		*reinterpret_cast<char*>(&slots_[k]) = '~'; // All I can offer instead of a real ~T() for now... ;)
 #endif
 	}
 #ifndef DEBUG
@@ -317,10 +319,10 @@ int main()
 	assert(slots.empty());
 	dump_state<L>(slots);
 
-	a = slots.get();      assert(a != L::ERROR);
+	a = slots.get();      assert(a != L::ERROR); // alloc only, no init!
 	b = slots.store('B'); assert(b != L::ERROR);
-	c = slots.get();      assert(c != L::ERROR);
-	d = slots.get();      assert(d != L::ERROR);
+	c = slots.get();      assert(c != L::ERROR); // alloc only, no init!
+	d = slots.get();      assert(d != L::ERROR); // alloc only, no init!
 
 	assert(slots.full());
 	err = slots.get();      assert(err == L::ERROR); // Now fail!
@@ -329,6 +331,8 @@ int main()
 	cout << slots.store(d, 'd') << '\n';
 	cout << (slots[a] = 'a') << '\n';
 	cout << "capacity: " << slots.capacity() << '\n';
+	// Note: [c] has not yet been assigned here! Should show '_' in DEBUG mode
+	//!! (but actually uninitialized UB/err in non-DEBUG!):
 	dump_state<L>(slots);
 
 	cout << (slots[b] = 'b') << '\n';
