@@ -248,7 +248,7 @@ public:
 		{
 			// Skip empty words wholesale; walk the set bits of the rest:
 			for (std::size_t w = 0; w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
-				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Kernighan's popcount (also: bits & -bits...)
+				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
 					keys_[size_++] = w * OCC_BITS + _ctz(bits);
 			assert(size_ == src.size());
 		}
