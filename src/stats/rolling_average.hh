@@ -1,7 +1,7 @@
-// v0.32.0
+// v0.32.2
 
-#ifndef _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_
-#define _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_
+#ifndef SRADFG8FUYHM8UHG8UBRNBGHNUFC5B6
+#define SRADFG8FUYHM8UHG8UBRNBGHNUFC5B6
 
 #include "sz/vocab/int.hh" // u32, u64
 
@@ -42,9 +42,9 @@ namespace stats {
 
 //----------------------------------------------------------------------------
 // Sliding-window rolling average (SMA)
-// Warning: this counter can be HUGE! It will contain MAX_SAMPLES+1 float or
-// double for the sample history!
-// See SmoothRollingAverage/FastSmoothRollingAverage for lightweight (EMA!)
+// Warning: this counter can be HUGE! It will contain MAX_SAMPLES+1 floats or
+// doubles for the sample history!
+// See SmoothRollingAverage/FastSmoothRollingAverage for lighter (but EMA!)
 // alternatives.
 template<int MAX_SAMPLES = 60, typename TFloat = float>
 struct RollingAverage
@@ -197,4 +197,4 @@ struct FastSmoothRollingAverage //!!C++: Alas, can't deduce TFloat from the othe
 } // namespace stats
 } // namespace sz
 
-#endif // _DFG8FUYHM8UHG8UBRNBGHNUFC5B6_
+#endif // SRADFG8FUYHM8UHG8UBRNBGHNUFC5B6
