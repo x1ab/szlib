@@ -1,4 +1,4 @@
-// 0.5.0
+// 0.6.0
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
@@ -94,6 +94,9 @@ NOTES:
 
 #include <cstddef> // size_t
 #include <cassert>
+#ifdef _MSC_VER
+#  include <intrin.h> // _BitScanForward[64]
+#endif
 
 namespace sz {
 
@@ -243,8 +246,11 @@ public:
 	{
 		each(lockers& src) : src_(src), gen_(src.gen_)
 		{
-			for (key_t k = 0; k < src.capacity_; ++k)
-				if (!src._is_free(k)) keys_[size_++] = k;
+			// Skip empty words wholesale; walk the set bits of the rest:
+			for (std::size_t w = 0; w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
+				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Kernighan's popcount (also: bits & -bits...)
+					keys_[size_++] = w * OCC_BITS + _ctz(bits);
+			assert(size_ == src.size());
 		}
 
 		std::size_t size() const { return size_; }
@@ -279,6 +285,9 @@ protected:
 	T            slots_[MAX];
 	key_t        free_stack_[MAX];
 	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Enjoy the "illiteration"... ;) )
+	// Occupancy bitmap (1 = allocated), kept in sync with free_stack_:
+	static constexpr std::size_t OCC_BITS = sizeof(std::size_t) * 8; // CHAR_BIT would need <climits>...
+	std::size_t  occ_[(MAX + OCC_BITS - 1) / OCC_BITS] = {};
 	std::size_t  gen_ = 0;        // Generation counter to track container-level structural changes
 	                              // (add/remove, later: realloc), to support iterator validity checking
 
@@ -288,6 +297,7 @@ protected:
 	void _push_free(key_t k) {
 		assert(!empty());
 		free_stack_[end_free_i_++] = k;
+		_occ_clear(k);
 #ifdef DEBUG
 		// Poison/mark the freed item as "discarded".
 		// (Gambling on T's op= not being confused by the junk there.)
@@ -297,19 +307,48 @@ protected:
 #ifndef DEBUG
 	key_t _pop_free() {
 		//!!assert(!full()); //!! Already returns ERROR at run-time! Check for that at the call sites instead!
-		return full() ? ERROR : free_stack_[--end_free_i_];
+		if (full()) return ERROR;
+		auto slot = free_stack_[--end_free_i_];
+		_occ_set(slot);
+		return slot;
 	}
 #else
 	key_t _pop_free() { if (full()) return ERROR;
 		auto slot = free_stack_[--end_free_i_];
 		free_stack_[end_free_i_] = (key_t)ERROR; // Mark the unused index slot
+		_occ_set(slot);
 		return slot;
 	}
 #endif
 	bool _is_free(key_t slot) const {
+		bool result = !(occ_[slot / OCC_BITS] >> (slot % OCC_BITS) & 1);
+		assert(result == _is_free_slow(slot)); // Cross-check vs. the free-stack (asserts-on builds only)
+		return result;
+	}
+#ifndef NDEBUG
+	bool _is_free_slow(key_t slot) const {
 		for (std::size_t free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
 			if (slot == free_stack_[free_i]) return true;
 		return false;
+	}
+#endif
+	void _occ_set(key_t slot)   { occ_[slot / OCC_BITS] |=  (std::size_t(1) << (slot % OCC_BITS)); }
+	void _occ_clear(key_t slot) { occ_[slot / OCC_BITS] &= ~(std::size_t(1) << (slot % OCC_BITS)); }
+
+	// Index of the lowest set bit (bits must be != 0)
+	static unsigned _ctz(std::size_t bits) {
+		assert(bits);
+#if defined(_MSC_VER)
+		unsigned long i;
+#  if defined(_WIN64)
+		_BitScanForward64(&i, bits);
+#  else
+		_BitScanForward(&i, bits);
+#  endif
+		return (unsigned)i;
+#else
+		return (unsigned)__builtin_ctzll(bits);
+#endif
 	}
 
 /*!! This unfinished draft would iterate the free slots -- which I forgot is utterly useless! :))
