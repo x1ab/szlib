@@ -1,13 +1,14 @@
-// 0.1.2
+// 0.2.0
 //#define DEBUG
 /*
-Constant-time "free-list" resource manager/allocator/container
+Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 
 	Clients can obtain opaque handles (keys) of "locker slots" (cells)
-	from a managed pool of a fixed number of contiguous cells, as long
-	as there are free ones left, and store a value of type T there.
-	(The container itself is agnostic to that actual type, it's just
-	a parameter to it.)
+	from a managed pool of a fixed number of contiguous cells (as long
+	as there are free ones left), and store a value of type T there.
+
+	T must be "trivially destructible" (POD-like): no actual destructor
+	call is made on free()! (-> #25)
 
 	Each cell represents a resource, and the key of the cell is
 	meant to be used as a handle to that resource. Each key is unique
@@ -17,23 +18,25 @@ Constant-time "free-list" resource manager/allocator/container
 	the cells.)
 
 	The intended use case is to model resource allocation (i.e. "locked"
-	exclusive use -- not in terms of concurrency, but ownership.
+	exclusive use -- not in terms of concurrency, but ownership).
 	Once a key has been obtained, another key to the same slot can't
 	be obtained.
 
 	Later, when done using the slot, its key should be "returned" to
-	the container, so the cell be freed for reuse.
+	the container, so the cell can be freed for reuse.
 	(Subsequent use of the same cell is not guaranteed to have the same
 	key assigned to it as before; actually, the notion of "same cell"
 	isn't even defined: it's always just one isolated cell that can be
-	accessed via a key, and there is no defined relation between keys.)
+	accessed via a key, and there is no defined relation between cells
+	or keys.)
 
 	Note: upon returning the key, the content of the cell will be
-	implicitly disposed of (destructed), but whether that would also
-	mean destroying (deallocating) the actual resource, is completely
-	outside of the concern of the container.
+	implicitly discarded: "deemed invalid", but not ~destructed.
+	This means that actually destroying (destructing, deallocating)
+	a tracked (stored) resource is completely out of scope for this
+	of the container.
 
-	Accessing the cell contents (e.g. to store or retrieve a T cargo
+	Accessing the cell's content (i.e. to store or retrieve a T value
 	value) is done via the usual key-value map semantics. There is
 	no ordering defined among the elements. There isn't even iterator
 	support either (so, e.g. in the STL sense, this isn't even a
@@ -88,8 +91,8 @@ NOTES:
 	     (in DEBUG mode).
 */
 
-#ifndef _3986GH78F786D102D75426748GB_
-#define _3986GH78F786D102D75426748GB_
+#ifndef LKR3986GH78F786D102D75426748GB
+#define LKR3986GH78F786D102D75426748GB
 
 #include <cstdint> // size_t
 #include <cassert>
@@ -100,14 +103,14 @@ template <typename T, std::size_t MAX>
 class lockers
 {
 public:
-	using key_t = std::size_t; // (Could be some other int., preferably unsigned; !!NOT SUPPORTED YET!)
+	using key_t = std::size_t; //!! Could be some other type (likely still unsigned)...
 
 	enum : key_t { ERROR = key_t(-1) };
 
 	//--------------------------------------------------------------------
 	// Reserve/Store/Release...
 
-	//!! Can't call this "reserve" for potential confusion to STL users... :-(
+	//!! Can't call this "reserve", STL "owns" that for a diff. concept... :-(
 	[[nodiscard]] key_t alloc() { // Or return ERROR
 		if (full()) return ERROR; // No assert, unlike for double free!
 		else return _pop_free();
@@ -119,7 +122,7 @@ public:
 	T& store(key_t slot, const T& cargo) {
 		assert(slot != ERROR);
 		assert(!_is_free(slot));
-		return _slots[slot] = cargo; } // Support method-chaining
+		return slots_[slot] = cargo; } // Support method-chaining
 	void free(key_t slot) {
 		assert(!empty());
 		assert(slot != ERROR);
@@ -138,30 +141,30 @@ public:
 		assert(!empty());
 		assert(key != ERROR);
 		assert(!_is_free(key));
-		return _slots[key]; }
+		return slots_[key]; }
 	T& operator [](key_t key) {
 		assert(!empty());
 		assert(key != ERROR);
 		assert(!_is_free(key));
-		return _slots[key]; }
+		return slots_[key]; }
 
 	//--------------------------------------------------------------------
 	// Queries...
 
-	bool empty()    const { assert(_end_free_i <= _capacity); return _end_free_i == _capacity; }
-	bool full()     const { return _end_free_i == 0; }
-	auto size()     const { return _capacity - _end_free_i; }
-	auto capacity() const { assert(_capacity == MAX); // a) for now..., b) Unbelievable: fails with MSVC /DBDEBUG! :-o
-	                        return _capacity; }
+	bool empty()    const { assert(end_free_i_ <= capacity_); return end_free_i_ == capacity_; }
+	bool full()     const { return end_free_i_ == 0; }
+	auto size()     const { return capacity_ - end_free_i_; }
+	auto capacity() const { assert(capacity_ == MAX); // a) for now..., b) Unbelievable: fails with MSVC /DBDEBUG! :-o
+	                        return capacity_; }
 
-	const T* pool() const { return _slots; }
-	      T* pool()       { return _slots; }
+	const T* pool() const { return slots_; }
+	      T* pool()       { return slots_; }
 
 	bool is_free(key_t slot) const {
 //std::cerr << "- checking key at is_free: " << slot << endl;
 		assert(slot != ERROR);
 		assert(slot >= 0);
-		assert(slot < _capacity);
+		assert(slot < capacity_);
 		//assert(!empty()); // Well, every key is free if there's nothing allocated... :)
 		return _is_free(slot); }
 
@@ -177,14 +180,14 @@ public:
 
 		assert(empty());
 		assert(size() == 0);
-		assert(_end_free_i == _capacity);
+		assert(end_free_i_ == capacity_);
 
 #ifdef DEBUG
-		for (auto i = 0; i < _capacity; ++i) {
-			assert(_free_stack[i] == i);
+		for (auto i = 0; i < capacity_; ++i) {
+			assert(free_stack_[i] == i);
 		}
-		for (auto i = 0; i < _capacity; ++i) {
-			_slots[i] = (T)'_';
+		for (auto i = 0; i < capacity_; ++i) {
+			slots_[i] = (T)'_';
 		}
 #endif		
 	}
@@ -192,19 +195,19 @@ public:
 	lockers(const lockers&) = delete; // No copy!
 
 /*
-	// This is a limited, not-very-useful "iterator" offering for now, just
+	// This is a limited, not-very-useful "iterator offering" for now, just
 	// to support range-based for to go through *each existing* storage slot
 	// (i.e. not each *actually used* one)!
-	T*       begin()       { return &_slots[0]; }
-	T*       end()         { return begin() + _capacity; }
-	const T* begin() const { return &_slots[0]; }
-	const T* end()   const { return begin() + _capacity; }
+	T*       begin()       { return &slots_[0]; }
+	T*       end()         { return begin() + capacity_; }
+	const T* begin() const { return &slots_[0]; }
+	const T* end()   const { return begin() + capacity_; }
 	const T* cbegin()      { return begin(); }
 	const T* cend()        { return end(); }
 	// Convert auto iterators provided by a range-for back to keys:
 	key_t key(const T* it) const {
-//std::cerr << "- key(): " << hex << (void*) it << " -> " << dec << (it - &_slots[0]) << endl;
-		return it - &_slots[0]; }
+//std::cerr << "- key(): " << hex << (void*) it << " -> " << dec << (it - &slots_[0]) << endl;
+		return it - &slots_[0]; }
 */
 
 
@@ -212,36 +215,37 @@ protected:
 	//--------------------------------------------------------------------
 	// Internals - Data...
 
-	std::size_t  _capacity = MAX; //!! DYNAMIC GROWTH NOT YET IMPL.!
-	T            _slots[MAX];
-	key_t        _free_stack[MAX];
-	std::size_t _end_free_i = 0; // Not key_t, as this is an internal iterator/index of keys! (Nice "illiteration", eh? ;) )
+	std::size_t  capacity_ = MAX; //!! A DYNAMIC-GROWTH OPTION NOT YET IMPL.!
+	                              //!! FTR, that would break the "stable addresses" trait too!
+	T            slots_[MAX];
+	key_t        free_stack_[MAX];
+	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Nice "illiteration", eh? ;) )
 
 	//--------------------------------------------------------------------
 	// Internals - Utilities...
 
 	void _push_free(key_t k) {
 		assert(!empty());
-		_free_stack[_end_free_i++] = k;
+		free_stack_[end_free_i_++] = k;
 #ifdef DEBUG
-		_slots[k] = (T)'~'; // Mark the freed element (with some luck with T... :) )
+		slots_[k] = (T)'~'; // Mark the freed element (with some luck with T... :) )
 #endif
 	}
 #ifndef DEBUG
 	key_t _pop_free() {
 		//!!assert(!full()); //!! Already returns ERROR at run-time! Check for that at the call sites instead!
-		return full() ? ERROR : _free_stack[--_end_free_i];
+		return full() ? ERROR : free_stack_[--end_free_i_];
 	}
 #else
 	key_t _pop_free() { if (full()) return ERROR;
-		auto slot = _free_stack[--_end_free_i];
-		_free_stack[_end_free_i] = (key_t)ERROR; // Mark the unused index slot
+		auto slot = free_stack_[--end_free_i_];
+		free_stack_[end_free_i_] = (key_t)ERROR; // Mark the unused index slot
 		return slot;
 	}
 #endif
 	bool _is_free(key_t slot) const {
-		for (auto free_i = 0; free_i < _end_free_i; ++free_i) //! Not free_i < size()!...
-			if (slot == _free_stack[free_i]) return true;
+		for (auto free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
+			if (slot == free_stack_[free_i]) return true;
 		return false;
 	}
 
@@ -249,30 +253,30 @@ protected:
 
 	struct safe_forward_iterator
 	{
-		safe_forward_iterator operator ++()    { return ++_freeslot_ptr; }
-		safe_forward_iterator operator ++(int) { return _freeslot_ptr++; }
-		safe_forward_iterator operator --()    { return --_freeslot_ptr; }
-		safe_forward_iterator operator --(int) { return _freeslot_ptr--; }
-		T& operator *()  { return _container->_slots[_freeslot_ptr*]; }
-		T& operator ->() { return _container->_slots + _freeslot_ptr*; }
+		safe_forward_iterator operator ++()    { return ++freeslot_ptr_; }
+		safe_forward_iterator operator ++(int) { return freeslot_ptr_++; }
+		safe_forward_iterator operator --()    { return --freeslot_ptr_; }
+		safe_forward_iterator operator --(int) { return freeslot_ptr_--; }
+		T& operator *()  { return container_->slots_[freeslot_ptr_*]; }
+		T& operator ->() { return container_->slots_ + freeslot_ptr_*; }
 
-		bool operator ==(const safe_forward_iterator& other) { return _freeslot_ptr == other._freeslot_ptr; }
+		bool operator ==(const safe_forward_iterator& other) { return freeslot_ptr_ == other.freeslot_ptr_; }
 		safe_forward_iterator& operator =(const safe_forward_iterator& other)
-			{	_container = other._container;
-				_freeslot_ptr = other._freeslot_ptr;
+			{	container_ = other.container_;
+				freeslot_ptr_ = other.freeslot_ptr_;
 				return *this; }
 
-		// "Forward" in not really any useful meaning though, I guess!
-		safe_forward_iterator(lockers* cont, lockers::_key_t* start = nullptr):
-			_container(cont),
-			_freeslot_ptr(start ? start : _container->_free_stack) // ... + _container->_end_free_i with reversed ++/--
+		// "Forward" in not really any useful sense though, I guess!
+		safe_forward_iterator(lockers* cont, lockers::key_t_* start = nullptr):
+			container_(cont),
+			freeslot_ptr_(start ? start : container_->free_stack_) // ... + container_->end_free_i_ with reversed ++/--
 			                                                       // could respect the stack ordering, but... pointless?
-			{ assert(_container != nullptr); }
+			{ assert(container_ != nullptr); }
 		safe_forward_iterator() = default;
 	private:
 		// Order matters!
-		lockers* _container = nullptr;
-		lockers::_key_t* _freeslot_ptr = nullptr;
+		lockers* container_ = nullptr;
+		lockers::key_t_* freeslot_ptr_ = nullptr;
 	};
 
 	using iterator = safe_forward_iterator;
@@ -344,4 +348,4 @@ int main()
 	dump_state<L>(slots);
 }
 #endif // UNIT_TEST
-#endif // _3986GH78F786D102D75426748GB_
+#endif // LKR3986GH78F786D102D75426748GB
