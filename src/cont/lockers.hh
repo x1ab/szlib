@@ -1,4 +1,4 @@
-// 0.3.0
+// 0.5.0
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
@@ -8,7 +8,7 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 	as there are free ones left), and store a value of type T there.
 
 	T must be `trivially destructible` (POD-like): no actual destructor
-	call is made on free()! (-> #25)
+	call is made on remove()! (-> #25)
 	!! BUT: The byte-poisoning in DEBUG mode also implicitly imposes
 	!! `trivially_constructible`, or in fact even more restrictions! :-o
 
@@ -47,7 +47,7 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" POD container
 	!! BUT: the "POD-like T" restriction goes directly against the "resource manager" assumption! :-o
 
 	Otherwise, the usual STL-like semantics applies: default-constructed
-	empty cells, by-value copy on 'store' (via op=), the usual STL-like
+	empty cells, by-value copy on 'set' (via op=), the usual STL-like
 	queries (empty, size, capacity etc.), no checks by default (making
 	it the user's responsibility to keep things valid).
 
@@ -70,7 +70,7 @@ NOTES:
 	empty slots -- in the worst case also ~n times, so we're somewhere
 	near O(n*n) territory...
 	(Keeping track of used slots, too, could make that constant time,
-	but only at the cost of degrading the performance of free() to
+	but only at the cost of degrading the performance of remove() to
 	linear time (if I'm not mistaken, because removing a key from the
 	'used' list requires another linear search, unlike allocation).
 	A better approach could be an occupancy bit mask: that would keep
@@ -106,25 +106,25 @@ public:
 	enum : key_t { ERROR = key_t(-1) };
 
 	//--------------------------------------------------------------------
-	// Reserve/Store/Release...
+	// Structural changes...
 
-	//!! Can't call this "reserve", STL "owns" that for a diff. concept... :-(
-	[[nodiscard]] key_t alloc() { // Or return ERROR
+	// Reserve a slot, without initializing it
+	// (Can't call it `reserve`, as STL "owns" that for a diff. concept! :-/ )
+	[[nodiscard]] key_t claim() { // Or return ERROR
 		if (full()) return ERROR; // Not assert, unlike for double free!
 		++gen_;
 		return _pop_free();
 	}
-	key_t store(const T& cargo) {
-		if (key_t slot; ERROR == (slot = alloc())) return ERROR;
-		store(slot, cargo);
+	// Claim + set
+	key_t add(const T& cargo) { // Or return ERROR
+		key_t slot = claim();
+		if (slot == ERROR) return ERROR;
+		set(slot, cargo);
 		return slot;
 	}
-	T& store(key_t slot, const T& cargo) {
-		assert(slot != ERROR);
-		assert(slot < capacity_);
-		assert(!_is_free(slot));
-		return slots_[slot] = cargo; } // Support method-chaining
-	void free(key_t slot) {
+
+	// "Unclaim" (discard, free, ...)
+	void remove(key_t slot) {
 		assert(!empty());
 		assert(slot != ERROR);
 		assert(slot < capacity_);
@@ -133,28 +133,62 @@ public:
 		++gen_;
 	}
 
-	// Alloc/free synonyms (until I can decide which set to keep...):
-	[[nodiscard]] key_t get()                { return alloc(); }
-	void                release(key_t slot)  { free(slot); }
-
 	//--------------------------------------------------------------------
 	// Element access...
 
+	// Set
+	T& set(key_t slot, const T& cargo) {
+		assert(!empty());
+		assert(slot != ERROR);
+		assert(slot < capacity_);
+		assert(!_is_free(slot));
+		return slots_[slot] = cargo; // Support method-chaining on T&
+	}
+
+	// Get (various flavors)
+	T& get(key_t slot) {
+		assert(!empty());
+		assert(slot != ERROR);
+		assert(slot < capacity_);
+		assert(!_is_free(slot));
+		return slots_[slot];
+	}
+	const T& get(key_t slot) const {
+		assert(!empty());
+		assert(slot != ERROR);
+		assert(slot < capacity_);
+		assert(!_is_free(slot));
+		return slots_[slot];
+	}
+	const T& cget(key_t slot) const {
+		assert(!empty());
+		assert(slot != ERROR);
+		assert(slot < capacity_);
+		assert(!_is_free(slot));
+		return slots_[slot];
+	}
 	const T& operator [](key_t key) const {
 		assert(!empty());
 		assert(key != ERROR);
 		assert(key < capacity_);
 		assert(!_is_free(key));
-		return slots_[key]; }
+		return get(key); }
 	T& operator [](key_t key) {
 		assert(!empty());
 		assert(key != ERROR);
 		assert(key < capacity_);
 		assert(!_is_free(key));
-		return slots_[key]; }
+		return get(key); }
+
+	// Old names (to be removed):
+	[[deprecated("use claim()")]]  [[nodiscard]] key_t alloc()   { return claim(); }
+	[[deprecated("use add()")]]    key_t store(const T& cargo)   { return add(cargo); }
+	[[deprecated("use set()")]]    T& store(key_t slot, const T& cargo) { return set(slot, cargo); }
+	[[deprecated("use remove()")]] void  free(key_t slot)        { remove(slot); }
+	[[deprecated("use remove()")]] void  release(key_t slot)     { remove(slot); }
 
 	//--------------------------------------------------------------------
-	// Queries...
+	// Misc. queries...
 
 	bool empty()    const { assert(end_free_i_ <= capacity_); return end_free_i_ == capacity_; }
 	bool full()     const { return end_free_i_ == 0; }
@@ -171,7 +205,8 @@ public:
 		//assert(!empty()); // Well, every key is free if there's nothing allocated... :)
 		return _is_free(slot); }
 
-	// Default ctor.
+	//--------------------------------------------------------------------
+	// Setup & C++ boilerplate
 	lockers()
 	{
 		// We're working backwards from a "fake" full state:
@@ -198,8 +233,10 @@ public:
 
 	lockers(const lockers&) = delete; // No copy!
 
+
+	//--------------------------------------------------------------------
 	// Iterable snapshot copy of the currently allocated keys.
-	// Any alloc/free on the source container invalidates it (asserted on access).
+	// Any claim/add/remove on the source container invalidates it (asserted on access).
 	// Usage: for (auto& x : sz::lockers<...>::each(l)) ..., or
 	// s.key(i) to get the slot handles (keys).
 	struct each
@@ -224,13 +261,14 @@ public:
 		iterator end()   { return {this, size_}; }
 
 	protected:
-		void _check() const { assert(gen_ == src_.gen_ && "lockers::snapshot used after alloc/free!"); }
+		void _check() const { assert(gen_ == src_.gen_ && "lockers::each used after claim/add/remove!"); }
 
 		lockers&    src_;
 		std::size_t gen_;
 		key_t       keys_[MAX];
 		std::size_t size_ = 0;
 	};
+
 
 protected:
 	//--------------------------------------------------------------------
@@ -342,16 +380,16 @@ int main()
 	assert(slots.empty());
 	dump_state<L>(slots);
 
-	a = slots.get();      assert(a != L::ERROR); // alloc only, no init!
-	b = slots.store('B'); assert(b != L::ERROR);
-	c = slots.get();      assert(c != L::ERROR); // alloc only, no init!
-	d = slots.get();      assert(d != L::ERROR); // alloc only, no init!
+	a = slots.claim();  assert(a != L::ERROR); // claim only, no init!
+	b = slots.add('B'); assert(b != L::ERROR);
+	c = slots.claim();  assert(c != L::ERROR); // claim only, no init!
+	d = slots.claim();  assert(d != L::ERROR); // claim only, no init!
 
 	assert(slots.full());
-	err = slots.get();      assert(err == L::ERROR); // Now fail!
-	err = slots.store('X'); assert(err == L::ERROR); // Ditto
+	err = slots.claim();  assert(err == L::ERROR); // Now fail!
+	err = slots.add('X'); assert(err == L::ERROR); // Ditto
 
-	cout << slots.store(d, 'd') << '\n';
+	cout << slots.set(d, 'd') << '\n';
 	cout << (slots[a] = 'a') << '\n';
 	cout << "capacity: " << slots.capacity() << '\n';
 	// Note: [c] has not yet been assigned here! Should show '_' in DEBUG mode
@@ -364,21 +402,21 @@ int main()
 	cout << "Keys obtained (a, b, c, d, err): "<< a <<", "<< b <<", "<< c <<", "<< d << ", "<< err << '\n';
 	dump_state<L>(slots);
 
-	slots.free(a);
-	cout << "free(a) -> is_free(a)? " << slots.is_free(a) << '\n';
+	slots.remove(a);
+	cout << "remove(a) -> is_free(a)? " << slots.is_free(a) << '\n';
 	dump_state<L>(slots);
 
 //	cout << (slots[a] = 'A') << '\n'; // DEBUG check should fail
 //	dump_state<L>(slots);
 
-	slots.store('Z'); // Should replace 'a'
+	slots.add('Z'); // Should replace 'a'
 	dump_state<L>(slots);
 
 	//--------------------------------------------------------------------
 	cout << "Iteration via lockers::each...\n";
 
 	// Iteration via snapshot
-	slots.free(b);
+	slots.remove(b);
 	{	L::each s(slots);
 		assert(s.size() == slots.size());
 		cout << "each (allocated): ";
@@ -387,10 +425,10 @@ int main()
 		for (std::size_t i = 0; i < s.size(); ++i) assert(slots[s.key(i)] == s[i]);
 		dump_state<L>(slots); // Changes went to the locker itself
 
-		slots.store(s.key(0), '!'); // Content change: snapshot stays valid
+		slots.set(s.key(0), '!'); // Content change: snapshot stays valid
 		assert(s[0] == '!');
 
-		slots.free(s.key(0));
+		slots.remove(s.key(0));
 //		s[0]; // Structural change: should fail the gen. check!
 	}
 	dump_state<L>(slots);
