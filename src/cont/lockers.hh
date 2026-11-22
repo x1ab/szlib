@@ -259,7 +259,7 @@ public:
 			// Skip empty words wholesale; walk the set bits of the rest:
 			for (std::size_t w = 0; size_ < src.size() && w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
 				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
-					keys_[size_++] = key_t(w * OCC_BITS + _ctz(bits));
+					keys_[size_++] = _slot_to_key(w * OCC_BITS + _ctz(bits));
 			assert(size_ == src.size());
 		}
 
@@ -352,6 +352,9 @@ protected:
 #endif
 	void _occ_set(key_t slot)   { occ_[slot / OCC_BITS] |=  (std::size_t(1) << (slot % OCC_BITS)); }
 	void _occ_clear(key_t slot) { occ_[slot / OCC_BITS] &= ~(std::size_t(1) << (slot % OCC_BITS)); }
+
+	// Slot index -> key (opaque handle); currently the same value
+	static key_t _slot_to_key(std::size_t slot) { assert(slot < MAX); return key_t(slot); }
 
 	// Index of the lowest set bit (bits must be != 0)
 	static unsigned _ctz(std::size_t bits) {
