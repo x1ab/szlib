@@ -215,9 +215,10 @@ public:
 		// We're working backwards from a "fake" full state:
 		assert(full()); // "full" here just means we don't have the free items pool (stack) init'd yet.
 
-		// Put all the keys we manage into the free-stack, rendering the container state "empty":
-		for (key_t k = 0; !empty(); ++k)
-			_push_free(k);
+		// Put all the keys we manage into the free-stack, rendering the container state "empty".
+		// Pushed in reverse, so claim() hands out 0, 1, 2... (keeps elements low, for each() & locality):
+		for (key_t k = capacity_; !empty(); )
+			_push_free(--k);
 
 		assert(empty());
 		assert(size() == 0);
@@ -225,7 +226,7 @@ public:
 
 #ifdef DEBUG
 		for (std::size_t i = 0; i < capacity_; ++i) {
-			assert(free_stack_[i] == i);
+			assert(free_stack_[i] == capacity_ - 1 - i);
 		}
 		// Note: this'll undo _push_free's '~' poisoning:
 		for (std::size_t i = 0; i < capacity_; ++i) {
