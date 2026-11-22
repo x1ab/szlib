@@ -395,6 +395,7 @@ protected:
 //----------------------------------------------------------------------------
 #ifdef UNIT_TEST // g++ -x c++ lockers.hh -DUNIT_TEST -DDEBUG -Wall -Wextra -pedantic
 #include <iostream>
+#include <chrono>
 using namespace std;
 using namespace sz;
 
@@ -411,6 +412,47 @@ auto dump_state = [](const T& lockers) {
 	}
 	cout << " - occupied: " << lockers.size() << endl;
 };
+
+// Rough timing of the main ops on a big locker
+void perf_test()
+{
+#ifndef DEBUG
+	constexpr std::size_t N = 1'000'000;
+#else
+	constexpr std::size_t N = 10'000; // The DEBUG _is_free cross-check is O(n) per access!
+#endif
+	using BigL = lockers<int, N>;
+	using Clock = std::chrono::steady_clock;
+	auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+
+	cout << "\nTiming (N = " << N << "):\n";
+	auto t0 = Clock::now();
+	auto& c = *new BigL;
+	auto t1 = Clock::now();
+	for (std::size_t i = 0; i < N; ++i) c.add(int(i));
+	auto t2 = Clock::now();
+	for (BigL::key_t k = 0; k < N; k += 2) c.remove(k);
+	auto t3 = Clock::now();
+	auto& e = *new BigL::each(c);
+	auto t4 = Clock::now();
+	long long sum = 0; for (auto& x : e) sum += x;
+	auto t5 = Clock::now();
+	long long sum2 = 0; for (std::size_t j = 0; j < e.size(); ++j) sum2 += c[e.key(j)];
+	auto t6 = Clock::now();
+
+	assert(c.size() == N / 2 && e.size() == N / 2);
+	assert(sum == sum2 && sum == (long long)(N / 2) * (N / 2)); // Sum of the odd numbers below N (= (N/2)^2, for even N)
+
+	cout << "  ctor:                 " << ms(t0, t1) << " ms\n"
+	     << "  add    x N:           " << ms(t1, t2) << " ms\n"
+	     << "  remove x N/2:         " << ms(t2, t3) << " ms\n"
+	     << "  each build (N/2):     " << ms(t3, t4) << " ms\n"
+	     << "  each walk:            " << ms(t4, t5) << " ms\n"
+	     << "  op[]   x N/2:         " << ms(t5, t6) << " ms\n"
+	     << "  (checksums: " << sum << ", " << sum2 << ")\n"; // Also keeps the optimizer from dropping the loops
+	delete &e;
+	delete &c;
+}
 
 int main()
 {
@@ -476,6 +518,8 @@ int main()
 //		s[0]; // Structural change: should fail the gen. check!
 	}
 	dump_state<L>(slots);
+
+	perf_test();
 }
 #endif // UNIT_TEST
 #endif // LKR3986GH78F786D102D75426748GB
