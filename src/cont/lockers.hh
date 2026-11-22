@@ -280,6 +280,12 @@ public:
 	//--------------------------------------------------------------------
 	// Iterable snapshot copy of the currently allocated keys
 	//
+	// To support static construction (and trivial copyability), the key list
+	// is not dynamically allocated to size() size, but rather a fixed-size
+	// array of MAX keys! (Which means much of the array size will be likely
+	// unused, and copying would also be wasteful/expensive with huge cell
+	// counts (i.e. capacity, i.e. MAX).
+
 		// Change tracking policy: which changes of the source container
 		// invalidate the snapshot? (asserted on access)
 		enum Invalidate {
@@ -293,13 +299,14 @@ public:
 	struct each
 	{
 		each(lockers& src, Invalidate mode = On_Any_Change)
-			: src_(src), mode_(mode), gen_(src.gen_), del_gen_(src.del_gen_)
+			: src_(&src), mode_(mode), gen_(src.gen_), del_gen_(src.del_gen_)
 		{
+			assert(src_);
 			// Skip empty words wholesale; walk the set bits of the rest:
-			for (std::size_t w = 0; size_ < src.size() && w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
-				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
+			for (std::size_t w = 0; size_ < src_->size() && w < sizeof src_->occ_ / sizeof src_->occ_[0]; ++w)
+				for (auto bits = src_->occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
 					keys_[size_++] = _index_to_key(w * OCC_BITS + _ctz(bits));
-			assert(size_ == src.size());
+			assert(size_ == src_->size());
 		}
 
 		std::size_t size() const { return size_; }
@@ -310,7 +317,7 @@ public:
 		#endif
 			return keys_[i];
 		}
-		T& operator [](std::size_t i)  { assert(i < size_); return src_[key(i)]; }
+		T& operator [](std::size_t i)  { assert(i < size_); return (*src_)[key(i)]; }
 
 		struct iterator {
 			each* s; std::size_t i;
@@ -323,11 +330,11 @@ public:
 
 	protected:
 		void _assert_sync() const { //!! May graduate to actual runtime checks later! -> #27
-			if (mode_ == Invalidate::On_Any_Change) assert(gen_     == src_.gen_);     // && "lockers::each(Invalidate::On_Any_Change): used after claim/add/remove!");
-			if (mode_ == Invalidate::On_Remove)     assert(del_gen_ == src_.del_gen_); // && "lockers::each(Invalidate::On_Remove): used after remove!");
+			if (mode_ == Invalidate::On_Any_Change) assert(gen_     == src_->gen_);     // && "lockers::each(Invalidate::On_Any_Change): used after claim/add/remove!");
+			if (mode_ == Invalidate::On_Remove)     assert(del_gen_ == src_->del_gen_); // && "lockers::each(Invalidate::On_Remove): used after remove!");
 		}
 
-		lockers&    src_;
+		lockers*    src_;
 		Invalidate  mode_;
 		std::size_t gen_;
 		std::size_t del_gen_;
