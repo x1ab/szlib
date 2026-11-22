@@ -449,6 +449,7 @@ void perf_test()
 	     << "  each build (N/2):     " << ms(t3, t4) << " ms\n"
 	     << "  each walk:            " << ms(t4, t5) << " ms\n"
 	     << "  op[]   x N/2:         " << ms(t5, t6) << " ms\n"
+	     << "  TOTAL:                " << ms(t0, t6) << " ms\n"
 	     << "  (checksums: " << sum << ", " << sum2 << ")\n"; // Also keeps the optimizer from dropping the loops
 	delete &e;
 	delete &c;
