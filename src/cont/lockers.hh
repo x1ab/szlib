@@ -136,6 +136,7 @@ public:
 		assert(!_is_free(slot)); // Double free?
 		_push_free(slot);
 		++gen_;
+		++del_gen_;
 	}
 
 	//--------------------------------------------------------------------
@@ -242,12 +243,18 @@ public:
 
 	//--------------------------------------------------------------------
 	// Iterable snapshot copy of the currently allocated keys.
-	// Any claim/add/remove on the source container invalidates it (asserted on access).
+	// Which changes of the source container invalidate it (asserted on access)
+	// is up to the creator:
+	//   sync::exact       - any claim/add/remove (default)
+	//   sync::keep_on_add - only remove (new items just won't be in the snapshot)
+	//   sync::unchecked   - nothing; the app knows better
+	enum class sync { exact, keep_on_add, unchecked };
+
 	// Usage: for (auto& x : sz::lockers<...>::each(l)) ..., or
 	// s.key(i) to get the slot handles (keys).
 	struct each
 	{
-		each(lockers& src) : src_(src), gen_(src.gen_)
+		each(lockers& src, sync mode = sync::exact) : src_(src), mode_(mode), gen_(src.gen_), del_gen_(src.del_gen_)
 		{
 			// Skip empty words wholesale; walk the set bits of the rest:
 			for (std::size_t w = 0; size_ < src.size() && w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
@@ -270,10 +277,15 @@ public:
 		iterator end()   { return {this, size_}; }
 
 	protected:
-		void _check() const { assert(gen_ == src_.gen_ && "lockers::each used after claim/add/remove!"); }
+		void _check() const {
+			if (mode_ == sync::exact)       assert(gen_     == src_.gen_     && "lockers::each (exact) used after claim/add/remove!");
+			if (mode_ == sync::keep_on_add) assert(del_gen_ == src_.del_gen_ && "lockers::each (keep_on_add) used after remove!");
+		}
 
 		lockers&    src_;
+		sync        mode_;
 		std::size_t gen_;
+		std::size_t del_gen_;
 		key_t       keys_[MAX];
 		std::size_t size_ = 0;
 	};
@@ -293,6 +305,7 @@ protected:
 	std::size_t  occ_[(MAX + OCC_BITS - 1) / OCC_BITS] = {};
 	std::size_t  gen_ = 0;        // Generation counter to track container-level structural changes
 	                              // (add/remove, later: realloc), to support iterator validity checking
+	std::size_t  del_gen_ = 0;    // Same, but for removals only (for each(..., sync::keep_on_add))
 
 	//--------------------------------------------------------------------
 	// Internals - Utilities...
@@ -517,6 +530,17 @@ int main()
 
 		slots.remove(s.key(0));
 //		s[0]; // Structural change: should fail the gen. check!
+	}
+	{	L::each s(slots, L::sync::keep_on_add);
+		[[maybe_unused]] auto n = s.size();
+		auto k = slots.add('n'); assert(k != L::ERROR);
+		assert(s.size() == n && s[0] == slots[s.key(0)]); // Still valid after an add, just doesn't see 'n'
+		slots.remove(k);
+//		s[0]; // Removal: should fail the del. gen. check!
+	}
+	{	L::each s(slots, L::sync::unchecked);
+		auto k = slots.add('u'); slots.remove(k);
+		(void)s[0]; // No check at all
 	}
 	dump_state<L>(slots);
 
