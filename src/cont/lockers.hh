@@ -83,7 +83,7 @@ NOTES:
 	By using handles, instead of direct T element references (pointers,
 	STL-like iterators), the explicit indirection
 
-	  a) triggers conscious effor (a.k.a "thinking") when accessing elements,
+	  a) triggers conscious effort (a.k.a "thinking") when accessing elements,
 
 	  b) offers a checkpoint in the container to catch invalid references
 	     (in DEBUG mode; but only until the slot gets reused).
