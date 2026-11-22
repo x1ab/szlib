@@ -280,20 +280,23 @@ public:
 	//--------------------------------------------------------------------
 	// Iterable snapshot copy of the currently allocated keys
 	//
+
+		// Change tracking policy: which changes of the source container
+		// invalidate the snapshot? (asserted on access)
+		//!! This would be shared across multiple snapshot classes; see #27!
+		enum Invalidate {
+			Never,         // Trust the app
+			On_Any_Change, // Claim/add/remove (default)
+			On_Remove      // Only bail on new removes (newly added items just won't be in the snapshot)
+		};
+
+	//
 	// To support static construction (and trivial copyability), the key list
 	// is not dynamically allocated to size() size, but rather a fixed-size
 	// array of MAX keys! (Which means much of the array size will be likely
 	// unused, and copying would also be wasteful/expensive with huge cell
-	// counts (i.e. capacity, i.e. MAX).
-
-		// Change tracking policy: which changes of the source container
-		// invalidate the snapshot? (asserted on access)
-		enum Invalidate {
-			Never,         // Trust the app
-			On_Any_Change, // Claim/add/remove (default)
-			On_Remove      // Only bail on new removes (newly items just won't be in the snapshot)
-		};
-
+	// counts (i.e. capacity, i.e. MAX).)
+	//
 	// Usage: for (auto& x : sz::lockers<...>::each(l)) ..., or
 	// s.key(i) to get the slot handles (keys).
 	struct each
@@ -358,7 +361,7 @@ protected:
 	occ_word_t   occ_[(MAX + OCC_BITS - 1) / OCC_BITS] = {};
 	// Container-level generation counters to track structural changes:
 	std::size_t  gen_ = 0;        // add/remove, to support iterator/snapshot validity checking
-	std::size_t  del_gen_ = 0;    // only remove, for more lenient checking (-> each::Invalidate::On_Remove)
+	std::size_t  del_gen_ = 0;    // only remove, for more lenient checking (-> Invalidate::On_Remove)
 	//!!?? Later perhaps another one for realloc, to cover the "stable addresses possibly lost" case...
 
 	//--------------------------------------------------------------------
