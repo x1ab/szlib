@@ -86,7 +86,7 @@ NOTES:
 	  a) triggers conscious effor (a.k.a "thinking") when accessing elements,
 
 	  b) offers a checkpoint in the container to catch invalid references
-	     (in DEBUG mode).
+	     (in DEBUG mode; but only until the slot gets reused).
 */
 
 #ifndef LKR3986GH78F786D102D75426748GB
