@@ -100,11 +100,13 @@ NOTES:
 
 namespace sz {
 
-template <typename T, std::size_t MAX>
+template <typename T, std::size_t MAX, typename KeyT = unsigned>
 class lockers
 {
 public:
-	using key_t = std::size_t; //!! Could be some other type (likely still unsigned)...
+	using key_t = KeyT;
+	static_assert(key_t(-1) > 0, "KeyT must be unsigned");
+	static_assert(MAX < key_t(-1), "MAX doesn't fit KeyT (its top value is reserved for ERROR)");
 
 	enum : key_t { ERROR = key_t(-1) };
 
@@ -250,7 +252,7 @@ public:
 			// Skip empty words wholesale; walk the set bits of the rest:
 			for (std::size_t w = 0; size_ < src.size() && w < sizeof src.occ_ / sizeof src.occ_[0]; ++w)
 				for (auto bits = src.occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
-					keys_[size_++] = w * OCC_BITS + _ctz(bits);
+					keys_[size_++] = key_t(w * OCC_BITS + _ctz(bits));
 			assert(size_ == src.size());
 		}
 
@@ -323,10 +325,12 @@ protected:
 #endif
 	bool _is_free(key_t slot) const {
 		bool result = !(occ_[slot / OCC_BITS] >> (slot % OCC_BITS) & 1);
-		assert(result == _is_free_slow(slot)); // Cross-check vs. the free-stack (asserts-on builds only)
+#ifdef DEBUG
+		assert(result == _is_free_slow(slot)); // Cross-check vs. the free-stack (O(n)!)
+#endif
 		return result;
 	}
-#ifndef NDEBUG
+#ifdef DEBUG
 	bool _is_free_slow(key_t slot) const {
 		for (std::size_t free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
 			if (slot == free_stack_[free_i]) return true;
