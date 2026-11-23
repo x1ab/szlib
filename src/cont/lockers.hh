@@ -537,7 +537,9 @@ int main()
 	{	L empty;
 		const L::each s(empty);
 		std::size_t n = 0;
+		cout << "each.keys() (empty): ";
 		for (auto k : s.keys()) { (void)k; ++n; }
+		cout << n << " keys\n";
 		assert(n == 0);
 	}
 	L::key_t a = K(-1), b = K(-2), c = K(-3), d = K(-4), err = K(-666); //! K(...) for signed->unsigned warnings
@@ -593,17 +595,22 @@ int main()
 		cout << '\n';
 		for (std::size_t i = 0; i < s.size(); ++i) assert(slots[s.key(i)] == s[i]);
 
+		cout << "each.keys() (key/value): ";
 		std::size_t i = 0;
 		for (auto k : s.keys()) {
 			assert(k == s.key(i));
 			assert(&slots[k] == &s[i]);
+			cout << k << ':' << slots[k] << ' ';
 			++i;
 		}
+		cout << '\n';
 		assert(i == s.size());
 
 		const auto& cs = s;
+		cout << "each.keys() (const): ";
 		std::size_t j = 0;
-		for (auto k : cs.keys()) { assert(k == cs.key(j)); ++j; }
+		for (auto k : cs.keys()) { assert(k == cs.key(j)); cout << k << ' '; ++j; }
+		cout << '\n';
 		assert(j == cs.size());
 
 		dump_state(slots); // Changes went to the locker itself
@@ -617,8 +624,10 @@ int main()
 	{	L::each s(slots, L::Invalidate::On_Remove);
 		[[maybe_unused]] auto n = s.size();
 		auto k = slots.add('n'); assert(k != L::ERROR);
+		cout << "each.keys() (On_Remove, after add): ";
 		std::size_t count = 0;
-		for (auto old_key : s.keys()) { assert(old_key != k); ++count; }
+		for (auto old_key : s.keys()) { assert(old_key != k); cout << old_key << ' '; ++count; }
+		cout << "(new " << k << " excluded)\n";
 		assert(count == n);
 		assert(s.size() == n && s[0] == slots[s.key(0)]); // Still valid after an add, just doesn't see 'n'
 		slots.remove(k);
