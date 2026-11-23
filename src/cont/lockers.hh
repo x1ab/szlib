@@ -1,4 +1,4 @@
-// 0.6.0
+// 0.6.1
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" container of POD-like items
@@ -297,8 +297,9 @@ public:
 	// unused, and copying would also be wasteful/expensive with huge cell
 	// counts (i.e. capacity, i.e. MAX).)
 	//
-	// Usage: for (auto& x : sz::lockers<...>::each(l)) ..., or
-	// s.key(i) to get the slot handles (keys).
+	// Usage: for (auto& x : sz::lockers<...>::each(l)) ...
+	//        Or use snapshot.key(i) to get the slot handles instead.
+	//        Also, for iterating over *keys* instead of T refs, see .keys() below!
 	struct each
 	{
 		each(lockers& src, Invalidate mode = On_Any_Change)
@@ -313,6 +314,7 @@ public:
 		}
 
 		std::size_t size() const { return size_; }
+
 		key_t key(std::size_t i) const {
 			assert(i < size_);
 		#ifndef NDEBUG
@@ -330,6 +332,28 @@ public:
 		};
 		iterator begin() { return {this, 0}; }
 		iterator end()   { return {this, size_}; }
+
+		// Support for iterating keys (not stored values directly, via T&)
+		// Usage: locker::each snapshot(pool);
+		//        for (auto& value : snapshot) process(value);       // T&
+		//        for (auto key : snapshot.keys()) process_key(key); // key_t		
+		struct key_range {
+			const each* owner_;
+			struct iterator {
+				const each* owner_;
+				std::size_t i;
+					key_t operator*() const { return owner_->key(i); }
+				iterator& operator++() { ++i; return *this; }
+				bool operator!=(const iterator& rhs) const {
+					assert(owner_ == rhs.owner_);
+					return i != rhs.i;
+				}
+			};
+			iterator begin() const { return {owner_, 0}; }
+			iterator end()   const { return {owner_, owner_->size()}; }
+		};
+
+		key_range keys() const { return {this}; }
 
 	protected:
 		void _assert_sync() const { //!! May graduate to actual runtime checks later! -> #27
