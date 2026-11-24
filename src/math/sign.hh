@@ -1,16 +1,18 @@
-#ifndef _SZ_SIGN_HH_
-#define _SZ_SIGN_HH_
+// v0.2.0
+#ifndef SZMSGNDFCSMD8F702N45T24875GYCHV
+#define SZMSGNDFCSMD8F702N45T24875GYCHV
 
-namespace sz {
+namespace sz::math {
 
-template <typename T>
-T sign(T x) {
-	// That weird "wishful casting" is a plea of "Please do no runtime conv. for these, like ever!..."
-	// (Hopefully redundant, but might potentially still silence some warnings, somebody please tell.)
-	if (x > 0) return (T)1;
-	if (x < 0) return (T)-1;
-	return (T)0;
+template <typename T> constexpr
+T sign(T x)
+// Note: sign(NaN) == 0.
+{
+	if (x > T(0)) return T(1);
+	if (x < T(0)) return T(T(0) - T(1)); // Not -T(1): avoids MSVC C4146 for unsigned & int-promotion for small types
+	return T(0);
 }
 
-}; // namespace
-#endif // _SZ_SIGN_HH_
+}; // namespace sz::math
+
+#endif // SZMSGNDFCSMD8F702N45T24875GYCHV
