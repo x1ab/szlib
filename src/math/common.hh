@@ -1,3 +1,9 @@
+// v0.1.0
+/*!!
+TODO:
+
+!!*/
+
 #ifndef ZMSZXCV204924T9BNUJM0X9CKVLNMJTIUC45
 #define ZMSZXCV204924T9BNUJM0X9CKVLNMJTIUC45
 
@@ -13,7 +19,9 @@
 namespace sz::math {
 
 
-// Unsigned-safe |a-b| (unlike just abs(a-b)!)
+// Note:
+// - Unsigned-safe |a-b| (unlike just abs(a-b)!)
+// - For signed integers: requires the difference to be representable in T.
 template <typename T> T absdiff(T a, T b) { return a > b ? a - b : b - a; }
 
 
