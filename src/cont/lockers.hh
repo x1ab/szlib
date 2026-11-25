@@ -1,4 +1,4 @@
-// 0.6.1
+// 0.6.2
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" container of POD-like items
@@ -233,7 +233,7 @@ public:
 	bool empty()    const { assert(end_free_i_ <= capacity_); return end_free_i_ == capacity_; }
 	bool full()     const { return end_free_i_ == 0; }
 	auto size()     const { return capacity_ - end_free_i_; }
-	auto capacity() const { assert(capacity_ == MAX); //!! a) for now..., b) Unbelievable: fails with MSVC /DDEBUG! :-o
+	auto capacity() const { assert(capacity_ == MAX); //!! For now...
 	                        return capacity_; }
 
 	bool is_free(key_t slot) const {
@@ -418,19 +418,8 @@ protected:
 	}
 #endif
 	bool _is_free(key_t slot) const {
-		bool result = !(occ_[slot / OCC_BITS] >> (slot % OCC_BITS) & 1);
-#ifdef DEBUG
-		assert(result == _is_free_slow(slot)); // Cross-check vs. the free-stack (O(n)!)
-#endif
-		return result;
+		return !(occ_[slot / OCC_BITS] >> (slot % OCC_BITS) & 1);
 	}
-#ifdef DEBUG
-	bool _is_free_slow(key_t slot) const {
-		for (std::size_t free_i = 0; free_i < end_free_i_; ++free_i) //! Not free_i < size()!...
-			if (slot == free_stack_[free_i]) return true;
-		return false;
-	}
-#endif
 	void _occ_set(key_t slot)   { occ_[slot / OCC_BITS] |=  (occ_word_t(1) << (slot % OCC_BITS)); }
 	void _occ_clear(key_t slot) { occ_[slot / OCC_BITS] &= ~(occ_word_t(1) << (slot % OCC_BITS)); }
 
@@ -488,12 +477,7 @@ auto dump_state = [](const auto& lockers) {
 // Rough timing of the main ops on a big locker
 void perf_test()
 {
-#if defined(DEBUG) && !defined(NDEBUG) //! The DEBUG _is_free cross-check is O(n) per access in asserts!
-	constexpr std::size_t N = 10'000;
-	cout << "\n*** WARNING: Cont. size reduced to "<< N <<" in DEBUG with (the slow) asserts enabled!\n";
-#else
 	constexpr std::size_t N = 1'000'000;
-#endif
 	using BigL = lockers<int, N>;
 	using Clock = std::chrono::steady_clock;
 	auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
