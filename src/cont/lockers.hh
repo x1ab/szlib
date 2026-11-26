@@ -1,4 +1,4 @@
-// 0.7.0
+// 0.7.1
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" container of POD-like items
@@ -428,8 +428,12 @@ public:
 	// Keys of occupied cells
 	struct key_range {
 		const lockers* c_;
-		struct iterator : const_iterator {
-			key_t operator *() const { return this->key(); }
+		struct iterator {
+			const_iterator it_;
+			key_t operator *() const { return it_.key(); }
+			iterator& operator ++() { ++it_; return *this; }
+			bool operator ==(const iterator& rhs) const { return it_ == rhs.it_; }
+			bool operator !=(const iterator& rhs) const { return it_ != rhs.it_; }
 		};
 		iterator begin() const { return {c_->begin()}; }
 		iterator end()   const { return {c_->end()}; }

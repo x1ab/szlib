@@ -95,7 +95,26 @@ int main()
 	using L = lockers<char, 4>;
 	using K = L::key_t;
 
+	// Verifying a fix to 0.7:
+	{
+		lockers<char, 4> p;
+		p.add('A');
+		p.add('B');
+
+		auto it = p.keys().begin();
+		auto first  = *it;
+		auto second = *++it;
+		cout << "keys(): " << +first << ", " << +second << '\n'; // Was 0, 66! (Should be 0, 1.)
+
+		static_assert(std::is_same_v<
+			decltype(*++it), decltype(p)::key_t
+		>, "++ must preserve key-iterator semantics");
+		assert(first == 0 && second == 1);
+	}
+
+
 	L slots;
+
 	{	L empty;
 		const L::each s(empty);
 		std::size_t n = 0;
@@ -104,6 +123,7 @@ int main()
 		cout << n << " keys\n";
 		assert(n == 0);
 	}
+
 	L::key_t a = K(-1), b = K(-2), c = K(-3), d = K(-4), err = K(-666); //! K(...) for signed->unsigned warnings
 
 //	slots.is_free('?'); // Not a key; should fail!
@@ -258,6 +278,14 @@ int main()
 		for (auto& x : h) { if (first < 0) first = x; ++cnt; }
 		assert(first == 290 && cnt == 10);
 	}
+	{
+		// Remove-current via keys(), smoke check:
+		lockers<int, 128> p;
+		for (int i = 0; i < 128; ++i) p.add(i);
+		for (auto k : p.keys()) p.remove(k);
+		assert(p.empty());
+	}
+
 #endif // SKIP_DIRECT_ITER
 
 	perf_test();
