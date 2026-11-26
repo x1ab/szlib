@@ -1,4 +1,4 @@
-// 0.6.2
+// 0.7.0
 //#define DEBUG
 /*
 Stable-index, stable-pointer, O(1) add/delete, "free-list-like" container of POD-like items
@@ -42,9 +42,10 @@ Stable-index, stable-pointer, O(1) add/delete, "free-list-like" container of POD
 
 	Accessing a cell's content (i.e. to store or retrieve a T value)
 	is done via the usual key-value map semantics. There is no ordering
-	defined among keys or elements. There isn't even *direct* iterator
-	support either on the `lockers` class itself (so, in the STL sense,
-	this isn't even a container), but see `lockers::each` later!
+	defined among keys or elements. Sequential access to all the stored
+	items is available either directly (`for (auto& x : pool)`, or
+	`pool.keys()`; forward-only), or via `lockers::each` snapshots
+	(stable, indexable). See the Iteration notes below!
 
 	Copying the container (considered to be a resource manager) is
 	disabled, too.
@@ -98,8 +99,11 @@ NOTES:
 	To avoid the extra per-slot linear searches, an occupancy bitmask
 	has been added in 0.6.0; that keeps cell state lookup O(1).
 	This made snapshot creation significantly faster, and cleared the
-	way for adding iteration support to the locker API directly (after
-	1.0; see #25).
+	way for adding iteration support to the locker API directly. That
+	was done in 0.7.0: `lockers::iterator` / `const_iterator` (forward-
+	only), plus `keys()`. These are for one-off passes; see the notes at
+	the iterator impl. for what changes in the container are allowed (i.e.
+	removing the current element is OK; adding/removing others needs `each`.)
 
 	(Keeping track of only the *used* slots instead of only the *free* ones
 	could've made iteration const-time per step, but at the cost of degrading
@@ -141,6 +145,13 @@ public:
 	static_assert(MAX <= key_t(-1), "MAX doesn't fit KeyT (its top value is reserved for ERROR)");
 
 	enum : key_t { ERROR = key_t(-1) };
+
+protected: // (Declared early, as the iterators below need them.)
+	// Occupancy bitmap word type & geometry (see occ_ below):
+	using occ_word_t = std::size_t;
+	static constexpr std::size_t OCC_BITS  = sizeof(occ_word_t) * 8; // CHAR_BIT would need <climits>...
+	static constexpr std::size_t OCC_WORDS = (MAX + OCC_BITS - 1) / OCC_BITS;
+public:
 
 	//--------------------------------------------------------------------
 	// Structural changes...
@@ -198,7 +209,7 @@ public:
 		assert(!_is_free(slot));
 		return slots_[slot];
 	}
-	const T& cget(key_t slot) const {
+	const T& cget(key_t slot) const { // A sad dup. of `get() const` just for the asserts!... :-/
 		assert(!empty());
 		assert(slot != ERROR);
 		assert(slot < capacity_);
@@ -278,38 +289,161 @@ public:
 
 
 	//--------------------------------------------------------------------
-	// Iterable snapshot copy of the currently allocated keys
+	// Direct iteration over the occupied cells...
 	//
-
-		// Change tracking policy: which changes of the source container
-		// invalidate the snapshot? (asserted on access)
-		//!! This would be shared across multiple snapshot classes; see #27!
-		enum Invalidate {
-			Never,         // Trust the app
-			On_Any_Change, // Claim/add/remove (default)
-			On_Remove      // Only bail on new removes (newly added items just won't be in the snapshot)
-		};
-
+	// Usage: for (auto& x : pool) ...             // T& (const T& on a const pool)
+	//        for (auto k : pool.keys()) ...       // key_t
+	//        for (auto it = pool.begin(); it != pool.end(); ++it)
+	//            use(it.key(), *it);              // Both
 	//
-	// To support static construction (and trivial copyability), the key list
-	// is not dynamically allocated to size() size, but rather a fixed-size
-	// array of MAX keys! (Which means much of the array size will be likely
-	// unused, and copying would also be wasteful/expensive with huge cell
-	// counts (i.e. capacity, i.e. MAX).)
+	//! The iter. sequence following an ascending slot index order is
+	//! just an implem. detail, not guranteed by the API! It may change
+	//! internally (e.g. for various policies later)!
+	//
+	// Some extra cost over O(1) is skipping empty bitmap words (OCC_BITS
+	// cells at a time) between elements.
+	//
+	// (The walk ends when each live element has been visited, skipping
+	// any trailing empty cells.)
+	//
+	// Changing the container while iterating:
+	//
+	//    - Updating element *values* (via *it, set(), [] etc.) is fine.
+	//
+	//    - remove()-ing the *current* element is also fine: ++ doesn't
+	//      consult the freed cell, as the iterator has already captured
+	//      everything it needs to advance (its own copy of the current
+	//      bitmap word, and a count of the elements still to visit).
+	//
+	//    - Adding or removing any *other* element is not supported: the
+	//      iterator would then skip, or try to visit, the wrong cells.
+	//      This is only caught where it's cheap to do so (via asserts):
+	//      dereferencing a freed cell, or running out of bitmap words
+	//      before visiting all the elements counted at begin(). (In the
+	//      latter case, with NDEBUG, the iterator just becomes end().)
+	//      Take an `each` snapshot instead, if you need to do that!
+	//
+	// Comparison:
+	//
+	//    - Iterators of the same container compare equal when they have
+	//      the same number of elements *left* to visit (so that the last
+	//      one would be equal to end(), which is defined as "0 left").
+	//      (This is to support removing the current element without
+	//      remembering the original count.)
+	//
+	//    - Comparison is only meaningful between iterators of the same 
+	//      iteration pass.
+	//
+protected:
+	template <typename L, typename V> // L: [const] lockers, V: [const] T
+	class _iterator_impl {
+		friend class lockers;
+
+		L*          c_;
+		std::size_t w_    = 0; // Index of the current bitmap word
+		occ_word_t  bits_ = 0; // Not-yet-visited set bits of word w_ (the lowest is the current element)
+		std::size_t left_;     // Number of elements still to visit, including the current one (0: end)
+
+		_iterator_impl(L* c, std::size_t left) : c_(c), left_(left) {
+			if (left_) { bits_ = c_->occ_[0]; _seek(); }
+		}
+
+		// Move on to the next nonempty bitmap word, if the current one is used up:
+		void _seek() {
+			while (!bits_) {
+				if (++w_ == OCC_WORDS) {
+					assert(!"lockers iteration: ran out of elements (some removed while iterating?)");
+					left_ = 0; // Become end()
+					return;
+				}
+				bits_ = c_->occ_[w_];
+			}
+		}
+
+		// Slot index of the current element. (The iterator works with indexes
+		// internally, and only converts to keys at the API boundary; see #27.)
+		std::size_t _index() const {
+			assert(left_ && "lockers iteration: accessing end()");
+			return w_ * OCC_BITS + _ctz(bits_);
+		}
+
+	public:
+		key_t key() const { return _index_to_key(_index()); }
+
+		V& operator *() const {
+			auto i = _index();
+			assert(c_->occ_[w_] >> (i % OCC_BITS) & 1 && "lockers iteration: cell freed while iterating?");
+			return c_->slots_[i];
+		}
+		V* operator ->() const { return &**this; }
+
+		_iterator_impl& operator ++() {
+			assert(left_ && "lockers iteration: ++ on end()");
+			if (--left_) {
+				bits_ &= bits_ - 1; // Drop the current (lowest set) bit
+				_seek();
+			}
+			return *this;
+		}
+
+		bool operator ==(const _iterator_impl& other) const { assert(c_ == other.c_); return left_ == other.left_; }
+		bool operator !=(const _iterator_impl& other) const { return !(*this == other); }
+	};
+
+public:
+	using iterator       = _iterator_impl<lockers, T>;
+	using const_iterator = _iterator_impl<const lockers, const T>;
+
+	iterator       begin()        { return {this, size()}; }
+	iterator       end()          { return {this, 0}; }
+	const_iterator begin()  const { return {this, size()}; }
+	const_iterator end()    const { return {this, 0}; }
+	const_iterator cbegin() const { return begin(); }
+	const_iterator cend()   const { return end(); }
+
+	//--------------------------------------------------------------------
+	// Snapshots...
 	//
 	// Usage: for (auto& x : sz::lockers<...>::each(l)) ...
 	//        Or use snapshot.key(i) to get the slot handles instead.
 	//        Also, for iterating over *keys* instead of T refs, see .keys() below!
+	//
+	// Note:
+	//
+	//    - To support static construction (and trivial copyability), the key list
+	//      is not dynamically allocated to size() size, but rather a fixed-size
+	//      array of MAX keys! (Which means much of the array size will be likely
+	//      unused, and copying would also be wasteful/expensive with huge cell
+	//      counts (i.e. capacity, i.e. MAX).)
+	//
+
+	// Change-tracking policy: which changes of the source container
+	// invalidate the snapshot (asserted on access)? -> #27
+	enum Invalidate {
+		Never,         // Trust the app
+		On_Any_Change, // Claim/add/remove (default)
+		On_Remove      // Only bail on new removes (newly added items just won't be in the snapshot)
+	};
+
+	// Keys of occupied cells
+	struct key_range {
+		const lockers* c_;
+		struct iterator : const_iterator {
+			key_t operator *() const { return this->key(); }
+		};
+		iterator begin() const { return {c_->begin()}; }
+		iterator end()   const { return {c_->end()}; }
+	};
+	key_range keys() const { return {this}; }
+
+	// Snapshot copy of the currently allocated keys
 	struct each
 	{
 		each(lockers& src, Invalidate mode = On_Any_Change)
 			: src_(&src), mode_(mode), gen_(src.gen_), del_gen_(src.del_gen_)
 		{
 			assert(src_);
-			// Skip empty words wholesale; walk the set bits of the rest:
-			for (std::size_t w = 0; size_ < src_->size() && w < sizeof src_->occ_ / sizeof src_->occ_[0]; ++w)
-				for (auto bits = src_->occ_[w]; bits; bits &= bits - 1) //! Drop lowest set bit -> Wegner's popcount (also: bits & -bits...)
-					keys_[size_++] = _index_to_key(w * OCC_BITS + _ctz(bits));
+			for (auto k : src.keys()) keys_[size_++] = k;
 			assert(size_ == src_->size());
 		}
 
@@ -317,7 +451,7 @@ public:
 
 		key_t key(std::size_t i) const {
 			assert(i < size_);
-		#ifndef NDEBUG
+		#ifndef NDEBUG // The empty call does make a difference in hot loops!
 			_assert_sync();
 		#endif
 			return keys_[i];
@@ -365,8 +499,8 @@ public:
 		Invalidate  mode_;
 		std::size_t gen_;
 		std::size_t del_gen_;
-		key_t       keys_[MAX];
 		std::size_t size_ = 0;
+		key_t       keys_[MAX];
 	};
 
 
@@ -380,9 +514,7 @@ protected:
 	key_t        free_stack_[MAX];
 	std::size_t  end_free_i_ = 0; // Not key_t, as this is an internal iterator/index of keys! (Enjoy the "illiteration"... ;) )
 	// Occupancy bitmap (1 = allocated), kept in sync with free_stack_:
-	using occ_word_t = std::size_t;
-	static constexpr auto OCC_BITS = sizeof(occ_word_t) * 8; // CHAR_BIT would need <climits>...
-	occ_word_t   occ_[(MAX + OCC_BITS - 1) / OCC_BITS] = {};
+	occ_word_t   occ_[OCC_WORDS] = {};
 	// Container-level generation counters to track structural changes:
 	std::size_t  gen_ = 0;        // add/remove, to support iterator/snapshot validity checking
 	std::size_t  del_gen_ = 0;    // only remove, for more lenient checking (-> Invalidate::On_Remove)
@@ -449,181 +581,4 @@ protected:
 }; // class lockers
 } // namespace sz
 
-
-//----------------------------------------------------------------------------
-#ifdef UNIT_TEST // g++ -x c++ lockers.hh -DUNIT_TEST -DDEBUG -Wall -Wextra -pedantic
-#include <iostream>
-#include <chrono>
-using namespace std;
-using namespace sz;
-
-// Not a locker:: member to avoid the <iostream> dep.!
-auto dump_state = [](const auto& lockers) {
-	for (std::size_t slot = 0; slot < lockers.capacity(); ++slot) {
-		auto key = lockers._index_to_key(slot);
-#ifndef DEBUG
-		cout << (lockers.is_free(key) ? '_' : (char)(lockers[key] > 31 ? lockers[key] & 127 : '?'));
-#else		
-		// The DEBUG extensions have already marked/poisoned the free items,
-		// but... [] access is still disallowed for freed items, so can't
-		//cout << *reinterpret_cast<const char*>(&lockers[slot]);
-		// ...so, just do the same as in non-DEBUG, for now:
-		cout << (lockers.is_free(key) ? '_' : (char)(lockers[key] > 31 ? lockers[key] & 127 : '?'));
-#endif
-	}
-	cout << " - occupied: " << lockers.size() << endl;
-};
-//!! #27: No sane conversion between key_t and size_t yet!
-// Rough timing of the main ops on a big locker
-void perf_test()
-{
-	constexpr std::size_t N = 1'000'000;
-	using BigL = lockers<int, N>;
-	using Clock = std::chrono::steady_clock;
-	auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
-
-	cout << "\nTiming (N = " << N << "):\n";
-	auto t0 = Clock::now();
-	auto& c = *new BigL;
-	auto t1 = Clock::now();
-	for (std::size_t i = 0; i < N; ++i) c.add(int(i));
-	auto t2 = Clock::now();
-	for (BigL::key_t k = 0; k < N; k += 2) c.remove(k);
-	auto t3 = Clock::now();
-	auto& e = *new BigL::each(c);
-	auto t4 = Clock::now();
-	long long sum = 0; for (auto& x : e) sum += x;
-	auto t5 = Clock::now();
-	long long sum2 = 0; for (std::size_t j = 0; j < e.size(); ++j) sum2 += c[e.key(j)];
-	auto t6 = Clock::now();
-
-	assert(c.size() == N / 2 && e.size() == N / 2);
-	assert(sum == sum2 && sum == (long long)(N / 2) * (N / 2)); // Sum of the odd numbers below N (= (N/2)^2, for even N)
-
-	cout << "  ctor:                 " << ms(t0, t1) << " ms\n"
-	     << "  add    x N:           " << ms(t1, t2) << " ms\n"
-	     << "  remove x N/2:         " << ms(t2, t3) << " ms\n"
-	     << "  each build (N/2):     " << ms(t3, t4) << " ms\n"
-	     << "  each walk:            " << ms(t4, t5) << " ms\n"
-	     << "  op[]   x N/2:         " << ms(t5, t6) << " ms\n"
-	     << "  TOTAL:                " << ms(t0, t6) << " ms\n"
-	     << "  (checksums: " << sum << ", " << sum2 << ")\n"; // Also keeps the optimizer from dropping the loops
-	delete &e;
-	delete &c;
-}
-
-int main()
-{
-	using L = lockers<char, 4>;
-	using K = L::key_t;
-
-	L slots;
-	{	L empty;
-		const L::each s(empty);
-		std::size_t n = 0;
-		cout << "each.keys() (empty): ";
-		for (auto k : s.keys()) { (void)k; ++n; }
-		cout << n << " keys\n";
-		assert(n == 0);
-	}
-	L::key_t a = K(-1), b = K(-2), c = K(-3), d = K(-4), err = K(-666); //! K(...) for signed->unsigned warnings
-
-//	slots.is_free('?'); // Not a key; should fail!
-
-	assert(slots.empty());
-	dump_state(slots);
-
-	a = slots.claim();  assert(a != L::ERROR); // claim only, no init!
-	b = slots.add('B'); assert(b != L::ERROR);
-	c = slots.claim();  assert(c != L::ERROR); // claim only, no init!
-	d = slots.claim();  assert(d != L::ERROR); // claim only, no init!
-
-	assert(slots.full());
-	err = slots.claim();  assert(err == L::ERROR); // Now fail!
-	err = slots.add('X'); assert(err == L::ERROR); // Ditto
-
-	cout << slots.set(d, 'd') << '\n';
-	cout << (slots[a] = 'a') << '\n';
-	cout << "capacity: " << slots.capacity() << '\n';
-	#ifndef DEBUG // Note: [c] has not yet been initialized here!
-	              // Should show '_' in DEBUG, but is UB/EB in non-DEBUG!
-		slots.set(c, '?');
-	#endif
-	dump_state(slots);
-
-	cout << (slots[b] = 'b') << '\n';
-	cout << (slots[c] = 'c') << '\n';
-
-	cout << "Keys obtained (a, b, c, d, err): "<< a <<", "<< b <<", "<< c <<", "<< d << ", "<< err << '\n';
-	dump_state(slots);
-
-	slots.remove(a);
-	cout << "remove(a) -> is_free(a)? " << slots.is_free(a) << '\n';
-	dump_state(slots);
-
-//	cout << (slots[a] = 'A') << '\n'; // DEBUG check should fail
-//	dump_state(slots);
-
-	slots.add('Z'); // Should replace 'a'
-	dump_state(slots);
-
-	//--------------------------------------------------------------------
-	cout << "Iteration via lockers::each...\n";
-
-	// Iteration via snapshot
-	slots.remove(b);
-	{	L::each s(slots);
-		assert(s.size() == slots.size());
-		cout << "each (allocated): ";
-		for (auto& x : s) { cout << x; x &= ~0x20; } // Print, then uppercase in place
-		cout << '\n';
-		for (std::size_t i = 0; i < s.size(); ++i) assert(slots[s.key(i)] == s[i]);
-
-		cout << "each.keys() (key/value): ";
-		std::size_t i = 0;
-		for (auto k : s.keys()) {
-			assert(k == s.key(i));
-			assert(&slots[k] == &s[i]);
-			cout << k << ':' << slots[k] << ' ';
-			++i;
-		}
-		cout << '\n';
-		assert(i == s.size());
-
-		const auto& cs = s;
-		cout << "each.keys() (const): ";
-		std::size_t j = 0;
-		for (auto k : cs.keys()) { assert(k == cs.key(j)); cout << k << ' '; ++j; }
-		cout << '\n';
-		assert(j == cs.size());
-
-		dump_state(slots); // Changes went to the locker itself
-
-		slots.set(s.key(0), '!'); // Content change: snapshot stays valid
-		assert(s[0] == '!');
-
-		slots.remove(s.key(0));
-//		s[0]; // Structural change: should fail the gen. check!
-	}
-	{	L::each s(slots, L::Invalidate::On_Remove);
-		[[maybe_unused]] auto n = s.size();
-		auto k = slots.add('n'); assert(k != L::ERROR);
-		cout << "each.keys() (On_Remove, after add): ";
-		std::size_t count = 0;
-		for (auto old_key : s.keys()) { assert(old_key != k); cout << old_key << ' '; ++count; }
-		cout << "(new " << k << " excluded)\n";
-		assert(count == n);
-		assert(s.size() == n && s[0] == slots[s.key(0)]); // Still valid after an add, just doesn't see 'n'
-		slots.remove(k);
-//		s[0]; // Removal: should fail the del. gen. check!
-	}
-	{	L::each s(slots, L::Invalidate::Never);
-		auto k = slots.add('u'); slots.remove(k);
-		(void)s[0]; // No check at all
-	}
-	dump_state(slots);
-
-	perf_test();
-}
-#endif // UNIT_TEST
 #endif // LKR3986GH78F786D102D75426748GB

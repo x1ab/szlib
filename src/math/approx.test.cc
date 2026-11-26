@@ -1,8 +1,8 @@
 #include "approx.hh"
 
 //============================================================================
-// [clan]g++ -x c++ -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -DUNIT_TEST
-// cl -EHsc -std:c++17 -TP -W4 -sdl -DUNIT_TEST
+// [clan]g++ -x c++ -Wall -Wextra -Wconversion -Wsign-conversion -pedantic
+// cl -EHsc -std:c++17 -TP -W4 -sdl
 
 #include <iostream>
 
