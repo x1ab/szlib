@@ -4,6 +4,7 @@
 
 #include "time.hh"
 #ifdef CHRONO
+# define SZ_TIME_IMPL
 # include "time/chrono.hh"
 #endif
 
