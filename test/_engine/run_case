@@ -32,9 +32,13 @@ echo "CASE: $CASE"
 if [ ! -d  "$case_path" ]; then
 	case_script_src="$case_path"
 	TEST_CASE_DIR=`dirname "$case_path"`
+	tc_setup_script="${case_script_src}.$SPACE_TC_SETUP_SCRIPT_NAME"
+	tc_cleanup_script="${case_script_src}.$SPACE_TC_CLEANUP_SCRIPT_NAME"
 else
 	case_script_src="$case_path/$TEST_CASE_SCRIPT_NAME"
 	TEST_CASE_DIR=$case_path
+	tc_setup_script="$TEST_CASE_DIR/$SPACE_TC_SETUP_SCRIPT_NAME"
+	tc_cleanup_script="$TEST_CASE_DIR/$SPACE_TC_CLEANUP_SCRIPT_NAME"
 fi
 
 if [ ! -e "$case_script_src" ]; then
@@ -118,6 +122,20 @@ if [ -e "$TEST_CASE_DIR/$EXPECT_FILE_NAME" ]; then
 fi
 
 #-----------------------------------
+# Run the optional TC setup script
+#-----------------------------------
+#!!DEBUG "TC SETUP SCRIPT: "$tc_setup_script""
+if [ -e "$tc_setup_script" ]; then
+	DEBUG "Running TC SETUP SCRIPT: \"$tc_cleanup_script\"..."
+	savecd=`pwd`
+	cd "${TEST_CASE_DIR}"
+		. "$tc_setup_script" 2> >(tee -a "$spacerrfile" >&2)
+		#. "$tc_setup_script" 2>> "$errfile"
+		#!! NO ERR CHK YET!
+	cd "${savecd}"
+fi
+
+#-----------------------------------
 # Run a build for the test case if it needs one... (and $MAKE is set)
 #-----------------------------------
 build_dir "$TEST_CASE_DIR" || FATAL "Failed to build the test case!" $_ABORT_
@@ -159,11 +177,27 @@ retval=$?; if [ ! -z "$ABORTED" ]; then #!! || [ -s "$errfile" ]; then
 #!!	DEBUG "accumulated cmd stderr: `cat \"$errfile\"`"
 	echo -e "  `cat \"$errfile\"`"
 	echo "  !!!!!!!!!!!!!!!!!!!!!!!!! ABORTED !!!!!!!!!!!!!!!!!!!!!!!!!"
+#!!?? Still run $tc_cleanup_script?! (C/C++ abort doesn't either...)
 	exit $_ABORT_
 fi
 
 # Forced fail/pass?
 if [ ! -z "$FORCED_RESULT" ]; then testcase_status=$FORCED_RESULT; fi
+
+
+#-----------------------------------
+# Run the optional TC cleanup script
+#-----------------------------------
+#!!DEBUG "TC CLEANUP SCRIPT: $tc_cleanup_script"
+if [ -e "$tc_cleanup_script" ]; then
+	DEBUG "Running TC CLEANUP SCRIPT: \"$tc_cleanup_script\"..."
+	savecd=`pwd`
+	cd "${TEST_CASE_DIR}"
+		. "$tc_cleanup_script" 2> >(tee -a "$spacerrfile" >&2)
+		#. "$tc_cleanup_script" 2>> "$errfile"
+		#!! NO ERR CHK YET!
+	cd "${savecd}"
+fi
 
 #-----------------------------------
 # Diff the result (if we're still in the green)

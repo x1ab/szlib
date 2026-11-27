@@ -7,7 +7,13 @@
 #!! Fortunately, prefixing commands with MSYS_NO_PATHCONV=1 helps.
 #!!?? Or perhaps even https://www.msys2.org/wiki/Porting/#user-content-filesystem-namespaces:
 #!!?? "Setting MSYS2_ARG_CONV_EXCL=* prevents any path transformation."?
-MSYS2_ARG_CONV_EXCL=*
+export MSYS2_ARG_CONV_EXCL=*
+
+if [ -z $SPACE_TEST_ENGINE_DIR ]; then
+	echo "- [Space Test] INTERNAL ERROR: SPACE_TEST_ENGINE_DIR not set before calling build.sh!"
+	exit 1
+fi
+. $SPACE_TEST_ENGINE_DIR/functions.sh
 
 # "$1" - source to compile; default: $TEST_NAME
 #! NOTE: Any individual $n args are expected to have been _quoted_ in the makefiles before passed to this script!
@@ -33,11 +39,17 @@ case $TOOLSET in
 msvc)
 	export INCLUDE="$_TEST_DIR;$_TEST_DIR/..;$INCLUDE"
 	#https://stackoverflow.com/a/73220812/1479945
-	MSYS_NO_PATHCONV=1 cl -nologo $_CFLAGS_MSVC -std:c++latest -W4 -wd4100 -EHsc -Zc:preprocessor "-Fo$outdir/" "$main_src" $CFLAGS_MSVC_
-	# ^^^ Redundant now, I guess, with `MSYS2_ARG_CONV_EXCL=*`, but keeping as a memento... ;)
+	cmd="cl -nologo $_CFLAGS_MSVC $CFLAGS_MSVC \"-Fo$outdir/\" \"$main_src\" $CFLAGS_MSVC_"
+	#!OLD:	MSYS_NO_PATHCONV=1 cl ...
+	#!OLD:	# ^^^ Redundant now, with `export MSYS2_ARG_CONV_EXCL=*`, but keeping as a memento!... ;)
 	;;
 gcc*)
+	# $CPATH is used implicitly"
 	#!!?? Not quite sure why GCC on e.g. w64devkit survives the botched path autoconv.:
-	g++ $_CFLAGS_GCC -std=c++2b -Wall "-I${TEST_DIR}" "-I${TEST_DIR}/.." -o "$exe" "$main_src" $CFLAGS_GCC_
+	#!!?? IOW: why no MSYS_NO_PATHCONV=1 here (only at MSVC)? Is it one-way, from Win to POSIX? (-> #100)
+	cmd="g++ $_CFLAGS_GCC $CFLAGS_GCC \"-I${TEST_DIR}\" \"-I${TEST_DIR}/..\" -o \"$exe\" \"$main_src\" $CFLAGS_GCC_"
 	;;
 esac
+
+DEBUG "$cmd"
+eval "$cmd"

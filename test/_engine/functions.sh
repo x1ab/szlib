@@ -139,6 +139,29 @@ abspath_fixup(){
 }
 
 #-----------------------------------------------------------------------------
+# Fix for the awkward double-quoting used to be required in test scripts for
+# RUN/SH when referring to vars with values that may contain spaces... -> #108
+# Supplied by Claude Opus 5.5. See used in RUN and SH!
+q(){
+# NEW:
+	case $1 in
+	*[[:space:]\'\"\\\$\`]*) printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")" ;;
+	*) printf %s "$1" ;;
+	esac
+#!!OLD:
+#!!	case $1 in *[[:space:]\'\"]*)       printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")" ;; *) printf %s "$1" ;; esac;
+}
+# Or, extended to support even the old awkward double quoting too:
+#q(){
+#	case $1 in
+#	\'*\'|\"*\") printf %s "$1" ;; # Pre-quoted legacy workaround: let sh unquote it, as before.
+#	'') printf "''" ;;
+#	*[[:space:]\'\"]*) printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")" ;;
+#	*) printf %s "$1" ;;
+#	esac;
+#}
+
+#-----------------------------------------------------------------------------
 RUN(){
 #	if [ ! -z "$ABORTED" ] && [ "$ABORTED" != "$_TENTATIVE_ABORT_" ]; then return $ABORTED; fi
 	if [ ! -z "$ABORTED" ]; then return $ABORTED; fi
@@ -179,7 +202,12 @@ RUN(){
 			cmd=$explicit_dirpath/`basename "$cmd"`
 		fi
 DEBUG Cmdline to run: "$cmd" $args
-		echo "\"$cmd\" $args"    > "$cmdfile"
+
+	#!!OLD:	echo "\"$cmd\" $args"    > "$cmdfile"
+	#!!NEW:
+		requoted_cmd="\"$cmd\""; for a in "$@"; do requoted_cmd="$requoted_cmd $(q "$a")"; done
+		echo "$requoted_cmd" > "$cmdfile"
+
 # This has been the only way to get at least \"arg with space\" work on Windows + Git Bash:
 		sh "$cmdfile" >> "$outfile" 2>> "$errfile"
 			# Alas, sh -e would be too hamfisted, and would probably prevent testing !0 exit codes...
@@ -228,8 +256,13 @@ SH(){
 
 DEBUG "SH args: [$args]"
 
-		echo "sh -c \"$cmd $args\"" > "$cmdfile"
-		sh -c "$cmd $args" >> "$outfile" 2>> "$errfile"
+
+	#!!OLD:	echo "sh -c \"$cmd\" $args" > "$cmdfile"
+	#!!	sh -c "$cmd $args" >> "$outfile" 2>> "$errfile"
+	#!!NEW:
+		requoted_cmd="$cmd"; for a in "$@"; do requoted_cmd="$requoted_cmd $(q "$a")"; done
+		echo "$requoted_cmd" > "$cmdfile"
+		sh -c "$requoted_cmd" >> "$outfile" 2>> "$errfile"
 		ret=$?
 #		echo $ret >> "$retfile"
 
