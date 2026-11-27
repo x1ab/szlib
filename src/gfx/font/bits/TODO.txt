@@ -1,0 +1,23 @@
+- [ ]	UNICODE chars
+
+	- endash       : – U+2013 decimal 8211
+	- emdash       : — U+2014 decimal 8212
+	- degree       : ° U+00B0 decimal 176
+	- copyright (C): © U+00A9 decimal 169
+	- alpha        : α U+03B1 decimal 945
+	- beta         : β U+03B2 decimal 946
+	- gamma        : γ U+03B3 decimal 947
+	- delta        : δ U+03B4 decimal 948
+	- pi           : π U+03C0 decimal 960
+	- mu           : μ U+03BC decimal 956 ("Preferred for scientific use", according to GPT...)
+	- micro sign   : µ U+00B5 decimal 181 (alias to mu)
+
+- [ ]	Make the new non-headeronly setup dual-mode: if sg. like HEADER_ONLY is defined,
+	then the header includes the .cpp as constexpr inline data.
+
+- [ ]	For #738, the font format may need a per-font width field.
+- [ ]	Also, the font format needs an option to set the codepoint at each char.
+	The mapping functions are not enough, as the bitmap loader must know the exact
+	cell data layout.
+	Sg. like a DATA_LAYOUT mini-/meta-format? (Could be reused for other assets later!
+	It's in the zeitgeist: C++ Reflections is also coming anyway. ;) )
