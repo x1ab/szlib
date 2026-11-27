@@ -240,7 +240,7 @@ class generic_clock
 	: public generic_clock_common_base<Derived, TimePolicy>
 {
 public:
-	using time = time<TimePolicy>;
+	using time = sz::time::time<TimePolicy>;
 //	using underlying_type = typename time::underlying_type;
 
 	generic_clock() = default;
@@ -271,7 +271,7 @@ class generic_clock<Derived, TimePolicy, detail::StandaloneClock>
 	: public generic_clock_common_base<Derived, TimePolicy>
 {
 public:
-	using time = time<TimePolicy>;
+	using time = sz::time::time<TimePolicy>;
 //	using underlying_type = typename time::underlying_type;
 
 	generic_clock() = default;
@@ -300,7 +300,7 @@ namespace impl
 	class _ClockName_ : public synthetic_clock<_ClockName_<NumT, UpstreamClockT, TransformT>, policy<NumT>, UpstreamClockT, TransformT> \
 	{             using base = synthetic_clock<_ClockName_<NumT, UpstreamClockT, TransformT>, policy<NumT>, UpstreamClockT, TransformT>; \
 	public: \
-		using time = time<policy<NumT>>; \
+		using time = sz::time::time<policy<NumT>>; \
 		using base::base; \
 		/*!!C++: Explicit forwarding ctor required for CTAD...: !!*/ \
 		explicit _ClockName_(UpstreamClockT& src, TransformT tr = TransformT{}) : base(src, tr) {} \
@@ -337,7 +337,7 @@ namespace impl
 		using base = generic_clock<Derived, PolicyT, UpstreamClockT, TransformT>;
 	public:
 		using base::base;
-		using time = time<PolicyT>;
+		using time = sz::time::time<PolicyT>;
 
 		//!!C++: Forwarding ctor for CTAD
 		explicit synthetic_clock(UpstreamClockT& src, TransformT tr = TransformT{})

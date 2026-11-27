@@ -44,7 +44,7 @@ namespace impl {
 		                                               TimePolicy, UpstreamClockT>
 		{
 		public:
-			using time = time<TimePolicy>;
+			using time = sz::time::time<TimePolicy>;
 
 			void advance() noexcept {}
 			// No-op: there's no internal state to advance,
