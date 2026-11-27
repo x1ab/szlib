@@ -1,3 +1,6 @@
+#!! Alas, one test case/script can't do multiple different (re)builds,
+#!! so for the time/chrono test a different case was added (byt GPT)...
+
 RUN $CASE
 
 # The time values in the test output are all synthetic, fortunately!... :)
