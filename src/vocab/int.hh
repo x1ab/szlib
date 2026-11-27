@@ -5,7 +5,7 @@
 #define FRGHMX3O8C4TBGO8Y7ETGNMC80457GR987V56
 
 
-#include "sz/lang/atom/int.hh"
+#include "../lang/atom/int.hh"
 
 /*!!??
 namespace sz::vocab::unint {

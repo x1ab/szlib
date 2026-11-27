@@ -1,6 +1,5 @@
 //----------------------------------------------------------------------------
 // Optional wrapper to chrono's steady clock
-//
 // Compile chrono.cc separately, or define SZ_TIME_IMPL in exactly one TU
 // before including this header. Other TUs need only this header.
 
@@ -9,7 +8,7 @@
 #pragma once
 
 #include "../time.hh"
-#include "../lang/atom/int.hh"
+#include "../vocab/int.hh"
 
 namespace sz {
 namespace time {
@@ -22,7 +21,7 @@ namespace impl {
 	namespace realtime {
 
 		seconds read_real_seconds() noexcept;
-		atom::unint::i64 read_real_ticks() noexcept;
+		i64 read_real_ticks() noexcept;
 
 		struct chrono_realtime_policy : analog_synthetic::policy<seconds> {
 			static constexpr bool strictly_monotonic = false; // chrono's steady clock is "just monotonic"
@@ -31,7 +30,9 @@ namespace impl {
 		//!! Alas, the existing wrapping_counter::policy is for unsigned types:
 		struct chrono_realticks_policy
 		{
-			using underlying_type = atom::unint::i64; // Native ticks, not necessarily nanoseconds
+			// Hide chrono's native rep type for compile-time isolation.
+			// i64 can represent all native ticks (checked in chrono.cc).
+			using underlying_type = i64;
 			static constexpr bool discrete = true;
 			static constexpr bool controlled_wrap = false;
 			static constexpr bool strictly_monotonic = false; // chrono's steady clock is "just monotonic"

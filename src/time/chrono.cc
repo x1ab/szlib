@@ -8,7 +8,7 @@ namespace sz::time::impl::realtime {
 using NativeRep = std::chrono::steady_clock::rep;
 static_assert(std::numeric_limits<NativeRep>::is_integer);
 static_assert(std::numeric_limits<NativeRep>::digits <=
-              std::numeric_limits<atom::unint::i64>::digits);
+              std::numeric_limits<i64>::digits);
 
 seconds read_real_seconds() noexcept
 {
@@ -17,7 +17,7 @@ seconds read_real_seconds() noexcept
 		steady_clock::now().time_since_epoch()).count();
 }
 
-atom::unint::i64 read_real_ticks() noexcept
+i64 read_real_ticks() noexcept
 {
 	return std::chrono::steady_clock::now().time_since_epoch().count();
 }
